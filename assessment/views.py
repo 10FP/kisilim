@@ -740,7 +740,7 @@ def course_difficulty(course, student=None):
         if class_avg < 65:
             score += 1
             reasons.append("Sınıf ortalaması 65'in altında.")
-
+#test
     if max_weight >= 50:
         score += 1
         reasons.append(f"Bir bileşen ders notunun %{max_weight}'ini belirliyor.")
