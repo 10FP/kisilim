@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel">
+    <header class="panel-header">
+        <div>
+            <p class="eyebrow">Öğretmen Paneli</p>
+            <h2>Ders bileşenleri ve LO bağlantıları</h2>
+            <p class="muted">Not bileşenlerini, ÖÇ katkılarını ve LO–PO ağırlıklarını yönetin.</p>
+        </div>
+        <form method="get" class="inline-form">
+            <label>
+                Ders
+                <select name="course">
+                    {% for c in courses %}
+                        <option value="{{ c.id }}" {% if selected_course and c.id == selected_course.id %}selected{% endif %}>{{ c.code }} - {{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <button type="submit">Seç</button>
+        </form>
+    </header>
+
+    {% if not selected_course %}
+        <p class="muted">Gösterilecek ders yok.</p>
+    {% else %}
+    <div class="card info-card">
+        <h4>LO çeşitliliği ve iyi eşleme için ipuçları</h4>
+        <ul class="plain">
+            <li>Her ders için farklı becerileri temsil eden 3-5 LO tanımlayın (teorik bilgi, uygulama, iletişim, etik vb.).</li>
+            <li>LO–PO ağırlıklarında aynı LO’yu birden fazla PÇ’ye bağlayarak müfredat kapsamasını gösterin.</li>
+            <li>Bileşen katkılarında (Vize/Lab/Proje) toplamı %100 olacak şekilde dağıtım yapın; böylece LO skorları dengeli oluşur.</li>
+            <li>Yaparsanız: Öğrenci paneli ve öneriler, "bu LO’yu biliyorsun" mesajlarını daha doğru gösterecek.</li>
+        </ul>
+    </div>
+
+    <div class="grid">
+        <div class="card">
+            <h4>0) Yeni Ders Oluştur</h4>
+            <p class="muted small">Ders kodu, adı ve dönemi girin. Oluşturduktan sonra LO ve bileşenleri ekleyin.</p>
+            <form method="post" class="form-grid">
+                {% csrf_token %}
+                <input type="hidden" name="form_type" value="course">
+                {% for field in course_form %}
+                    <label class="form-field">
+                        <span>{{ field.label }}</span>
+                        {{ field }}
+                        {% if field.help_text %}<small class="muted">{{ field.help_text }}</small>{% endif %}
+                        {% for error in field.errors %}<div class="error">{{ error }}</div>{% endfor %}
+                    </label>
+                {% endfor %}
+                <div class="action-group">
+                    <button type="submit" class="btn primary">Ders Oluştur</button>
+                </div>
+            </form>
+        </div>
+        <div class="card">
+            <h4>0.1) Yeni LO ekle</h4>
+            <p class="muted small">Seçili ders için yeni öğrenme çıktısı tanımlayın.</p>
+            <form method="post" class="form-grid">
+                {% csrf_token %}
+                <input type="hidden" name="form_type" value="lo">
+                {% for field in learning_outcome_form %}
+                    <label class="form-field">
+                        <span>{{ field.label }}</span>
+                        {{ field }}
+                        {% if field.help_text %}<small class="muted">{{ field.help_text }}</small>{% endif %}
+                        {% for error in field.errors %}<div class="error">{{ error }}</div>{% endfor %}
+                    </label>
+                {% endfor %}
+                <div class="action-group">
+                    <button type="submit" class="btn primary">LO Ekle</button>
+                </div>
+            </form>
+        </div>
+        <div class="card">
+            <h4>0.2) Yeni PÇ ekle</h4>
+            <p class="muted small">Program çıktısı ekleyin; LO–PO haritasında kullanılır.</p>
+            <form method="post" class="form-grid">
+                {% csrf_token %}
+                <input type="hidden" name="form_type" value="po">
+                {% for field in program_outcome_form %}
+                    <label class="form-field">
+                        <span>{{ field.label }}</span>
+                        {{ field }}
+                        {% if field.help_text %}<small class="muted">{{ field.help_text }}</small>{% endif %}
+                        {% for error in field.errors %}<div class="error">{{ error }}</div>{% endfor %}
+                    </label>
+                {% endfor %}
+                <div class="action-group">
+                    <button type="submit" class="btn primary">PÇ Ekle</button>
+                </div>
+            </form>
+        </div>
+        <div class="card">
+            <h4>1) Not Bileşeni ekle</h4>
+            <p class="muted small">Bu bileşenlerin ağırlıkları birlikte %100'ü geçmesin. (Örn: Vize %40, Proje %60)</p>
+            {% if component_form.instance.pk %}<div class="note">Düzenleme: {{ component_form.instance.name }}</div>{% endif %}
+            <form method="post" class="form-grid">
+                {% csrf_token %}
+                <input type="hidden" name="form_type" value="component">
+                <input type="hidden" name="object_id" value="{{ component_form.instance.id }}">
+                {% for field in component_form %}
+                    <label class="form-field">
+                        <span>{{ field.label }}</span>
+                        {{ field }}
+                        {% if field.help_text %}<small class="muted">{{ field.help_text }}</small>{% endif %}
+                        {% for error in field.errors %}<div class="error">{{ error }}</div>{% endfor %}
+                    </label>
+                {% endfor %}
+                <div class="action-group">
+                    <button type="submit" class="btn primary">Kaydet</button>
+                    {% if component_form.instance.pk %}
+                        <a class="btn ghost" href="?course={{ selected_course.id }}">İptal</a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+        <div class="card">
+            <h4>2) ÖÇ katkısı ekle</h4>
+            <p class="muted small">Her not bileşeni için ilgili LO’lara dağılım yapın (toplam %100 önerilir).</p>
+            {% if lo_contribution_form.instance.pk %}<div class="note">Düzenleme: {{ lo_contribution_form.instance }}</div>{% endif %}
+            <form method="post" class="form-grid">
+                {% csrf_token %}
+                <input type="hidden" name="form_type" value="contrib">
+                <input type="hidden" name="object_id" value="{{ lo_contribution_form.instance.id }}">
+                {% for field in lo_contribution_form %}
+                    <label class="form-field">
+                        <span>{{ field.label }}</span>
+                        {{ field }}
+                        {% if field.help_text %}<small class="muted">{{ field.help_text }}</small>{% endif %}
+                        {% for error in field.errors %}<div class="error">{{ error }}</div>{% endfor %}
+                    </label>
+                {% endfor %}
+                <div class="action-group">
+                    <button type="submit" class="btn primary">Kaydet</button>
+                    {% if lo_contribution_form.instance.pk %}
+                        <a class="btn ghost" href="?course={{ selected_course.id }}">İptal</a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+        <div class="card">
+            <h4>3) LO–PO ağırlığı ekle</h4>
+            <p class="muted small">Bu dersin LO’larının programa katkısını 1-5 arası işaretleyin. 1=düşük, 5=çok güçlü katkı.</p>
+            {% if lopo_form.instance.pk %}<div class="note">Düzenleme: {{ lopo_form.instance }}</div>{% endif %}
+            <form method="post" class="form-grid">
+                {% csrf_token %}
+                <input type="hidden" name="form_type" value="lopo">
+                <input type="hidden" name="object_id" value="{{ lopo_form.instance.id }}">
+                {% for field in lopo_form %}
+                    <label class="form-field">
+                        <span>{{ field.label }}</span>
+                        {{ field }}
+                        {% if field.help_text %}<small class="muted">{{ field.help_text }}</small>{% endif %}
+                        {% for error in field.errors %}<div class="error">{{ error }}</div>{% endfor %}
+                    </label>
+                {% endfor %}
+                <div class="action-group">
+                    <button type="submit" class="btn primary">Kaydet</button>
+                    {% if lopo_form.instance.pk %}
+                        <a class="btn ghost" href="?course={{ selected_course.id }}">İptal</a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="cards">
+        <article class="card">
+            <h4>Not bileşenleri</h4>
+            <table class="compact">
+                <thead><tr><th>Ad</th><th>Ağırlık</th><th>Aksiyon</th></tr></thead>
+                <tbody>
+                {% for comp in assessments %}
+                    <tr>
+                        <td>{{ comp.name }}</td>
+                        <td>{{ comp.weight_percent }}%</td>
+                        <td class="actions">
+                            <a class="btn ghost" href="?course={{ selected_course.id }}&edit_component={{ comp.id }}">Düzenle</a>
+                            <form method="post">
+                                {% csrf_token %}
+                                <input type="hidden" name="form_type" value="component_delete">
+                                <input type="hidden" name="object_id" value="{{ comp.id }}">
+                                <button type="submit" class="btn danger">Sil</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="3" class="muted">Henüz bileşen yok.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </article>
+
+        <article class="card">
+            <h4>ÖÇ katkıları</h4>
+            <table class="compact">
+                <thead><tr><th>Bileşen</th><th>LO</th><th>Katkı (%)</th><th>Aksiyon</th></tr></thead>
+                <tbody>
+                {% for item in lo_contributions %}
+                    <tr>
+                        <td>{{ item.assessment_component.name }}</td>
+                        <td>{{ item.learning_outcome.code }}</td>
+                        <td>{{ item.contribution_percent }}%</td>
+                        <td class="actions">
+                            <a class="btn ghost" href="?course={{ selected_course.id }}&edit_contrib={{ item.id }}">Düzenle</a>
+                            <form method="post">
+                                {% csrf_token %}
+                                <input type="hidden" name="form_type" value="contrib_delete">
+                                <input type="hidden" name="object_id" value="{{ item.id }}">
+                                <button type="submit" class="btn danger">Sil</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="4" class="muted">Henüz katkı girilmedi.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </article>
+
+        <article class="card">
+            <h4>LO–PO haritası</h4>
+            <table class="compact">
+                <thead><tr><th>LO</th><th>PO</th><th>Ağırlık</th><th>Aksiyon</th></tr></thead>
+                <tbody>
+                {% for link in lo_links %}
+                    <tr>
+                        <td>{{ link.learning_outcome.code }}</td>
+                        <td>{{ link.program_outcome.code }}</td>
+                        <td>{{ link.weight }}</td>
+                        <td class="actions">
+                            <a class="btn ghost" href="?course={{ selected_course.id }}&edit_lopo={{ link.id }}">Düzenle</a>
+                            <form method="post">
+                                {% csrf_token %}
+                                <input type="hidden" name="form_type" value="lopo_delete">
+                                <input type="hidden" name="object_id" value="{{ link.id }}">
+                                <button type="submit" class="btn danger">Sil</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="4" class="muted">Henüz eşleşme yok.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </article>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

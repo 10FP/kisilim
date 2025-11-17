@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero" id="dersler">
+    <div>
+        <p class="eyebrow">Ders Öğrenme Çıktıları</p>
+        <h1>Program hedeflerini karşılayan<br>web tabanlı değerlendirme sistemi</h1>
+        <p class="lede">Öğrenme çıktılarının program çıktılarıyla bağlantısını göstermek, müfredat uyumunu izlemek ve öğrenci gelişimini şeffaflaştırmak için tasarlandı.</p>
+    </div>
+    <div class="pill-group">
+        <span class="pill">Öğrenme Çıktıları ve Program Çıktıları İlişkisi</span>
+        <span class="pill">Kullanıcı Rolleri ve Sorumluluklar</span>
+        <span class="pill">Öğrenci Paneli</span>
+    </div>
+</section>
+
+<section class="cards">
+    <article class="card">
+        <h3>ÖÇ–PÇ İlişkisi</h3>
+        <p>Her öğrenme çıktısı (LO) bir veya birden fazla program çıktısına (PO) 1–5 arası ağırlıkla bağlanır.</p>
+        <p class="muted">Veri kaynağı: Bilgi Paketi &gt; Ders ve Program Yeterlilikleri.</p>
+    </article>
+    <article class="card">
+        <h3>Kullanıcı Rolleri</h3>
+        <ul class="plain">
+            <li><strong>Dekanlık / Bölüm:</strong> Üst düzey PÇ tanımlar, LO–PO ilişkilerini onaylar.</li>
+            <li><strong>Eğitmenler:</strong> LO oluşturur, not ve katkı yüzdelerini girer.</li>
+            <li><strong>Öğrenciler:</strong> Kişisel panelden ilerlemeyi ve PÇ katkılarını takip eder.</li>
+        </ul>
+    </article>
+    <article class="card">
+        <h3>Öğrenci Paneli</h3>
+        <p>Ders performansı, LO’lar ve PÇ’ler arasındaki bağları sade bir haritada gösterir. Her ders için bireysel notlar ve sınıf ortalamaları yan yana durur.</p>
+    </article>
+</section>
+
+<section class="panel info-panel">
+    <header class="panel-header">
+        <div>
+            <p class="eyebrow">Sözlük ve açıklamalar</p>
+            <h2>Kısaltmalar ve bölümler</h2>
+            <p class="muted">Sayfada gördüğünüz her kısaltmanın açılımı ve bölümlerin amacı.</p>
+        </div>
+    </header>
+    <div class="two-col">
+        <div>
+            <ul class="definitions">
+                <li><strong>ÖÇ / LO:</strong> Öğrenme Çıktısı – dersin kazandırdığı yetkinlik.</li>
+                <li><strong>PÇ / PO:</strong> Program Çıktısı – programın mezunda beklediği yetkinlik.</li>
+                <li><strong>LO–PO:</strong> Bir ÖÇ’nin bir PÇ’ye katkısı (1–5 ağırlıkla).</li>
+                <li><strong>Katkı (%):</strong> Not bileşeninin ilgili ÖÇ’ye etkisi.</li>
+                <li><strong>Program Performansı:</strong> ÖÇ skorlarının LO–PO ağırlıklarıyla normalize edilmesi.</li>
+                <li><strong>Vize / Proje / Yüzde:</strong> Not bileşenleri ve ders içi ağırlıkları.</li>
+            </ul>
+        </div>
+        <div>
+            <ul class="plain">
+                <li><strong>Genel Bakış:</strong> Bu sayfa; ilişkileri, rollerin işini ve örnek öğrenci panelini özetler.</li>
+                <li><strong>Öğrenci Paneli:</strong> Öğrencinin seçtiği ders için not, ÖÇ ve PÇ katkılarını gösterir.</li>
+                <li><strong>Öğretmen Paneli:</strong> Ders bileşenlerini, ÖÇ katkılarını ve LO–PO ağırlıklarını yönetmek için kullanılır.</li>
+                <li><strong>Raporlar:</strong> Program çıktısı bazlı çubuk grafiklerle katkı görselleştirmesi.</li>
+            </ul>
+        </div>
+    </div>
+</section>
+
+<section class="panel" id="learning-outcomes">
+    <header class="panel-header">
+        <div>
+            <p class="eyebrow">Öğrenme Çıktıları – Program Çıktıları</p>
+            <h2>LO–PO eşleştirmesi</h2>
+            <p class="muted">1–5 ağırlık puanları ile hangi LO’nun hangi PÇ’ye hizmet ettiğini görün.</p>
+        </div>
+    </header>
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>Öğrenme Çıktısı</th>
+                    <th>Program Çıktısı</th>
+                    <th>Ağırlık</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for link in learning_outcome_links %}
+                <tr>
+                    <td>{{ link.learning_outcome.course.code }} {{ link.learning_outcome.code }}</td>
+                    <td>{{ link.program_outcome.code }} - {{ link.program_outcome.title }}</td>
+                    <td><span class="badge">{{ link.weight }}</span></td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="3" class="muted">Henüz ilişki yok.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="two-col" id="program-outcomes">
+    <div>
+        <p class="eyebrow">Kullanıcı Roller ve Sorumluluklar</p>
+        <h2>Roller</h2>
+        <ul class="steps">
+            <li><strong>Dekanlık Ofisi ve Bölüm Başkanları:</strong> Üst düzey PÇ’leri belirler, LO–PO ilişkilerini onaylar, müfredat uyumunu sağlar.</li>
+            <li><strong>Eğitmenler:</strong> LO oluşturur, öğrenci notlarını girer ve aktivitelerin LO’ya katkı yüzdesini işler.</li>
+            <li><strong>Öğrenciler:</strong> İlerlemelerini bütüncül görür, sınıf ortalamasıyla kıyaslar.</li>
+        </ul>
+    </div>
+    <aside class="side-panel" id="raporlar">
+        <h4>Yan Panel</h4>
+        <ol>
+            <li>Panel – herkes kişisel panelini görür.</li>
+            <li>Sekmeli navigasyon – dersler, çıktılar ve raporlara kolay erişim.</li>
+            <li>Etkileşimli tablolar – not, yüzde ve LO–PO eşleştirme girişleri.</li>
+            <li>Görselleştirme araçları – çubuk grafiklerle katkı gösterimi.</li>
+            <li>Duyarlı tasarım – bilgisayar ve mobilde sorunsuz.</li>
+        </ol>
+    </aside>
+</section>
+
+<section class="panel" id="student-panel">
+    <header class="panel-header">
+        <div>
+            <p class="eyebrow">Öğrenci Paneli</p>
+            <h2>Performans ve çıktılar</h2>
+            <p class="muted">Ders performansını LO ve PÇ’lere bağlayan sade bir görünüm.</p>
+        </div>
+        {% if student %}
+            <div class="tag">Aktif öğrenci: {{ student.full_name }}</div>
+        {% endif %}
+    </header>
+
+    {% if not student %}
+        <p class="muted">Gösterilecek öğrenci verisi yok. Admin panelinden veya bootstrap_demo_data ile veri ekleyin.</p>
+    {% endif %}
+
+    {% for enrollment in enrollments %}
+    <div class="course-card">
+        <header>
+            <div>
+                <p class="eyebrow">{{ enrollment.course.term }}</p>
+                <h3>{{ enrollment.course.code }} – {{ enrollment.course.name }}</h3>
+            </div>
+            <span class="tag secondary">Katkı haritası</span>
+        </header>
+
+        <div class="grid">
+            <div>
+                <h4>Not bileşenleri</h4>
+                <table class="compact">
+                    <thead>
+                        <tr>
+                            <th>Bileşen</th>
+                            <th>Yüzde</th>
+                            <th>Not</th>
+                            <th>Sınıf Ort.</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for item in enrollment.assessments %}
+                        <tr>
+                            <td>{{ item.name }}</td>
+                            <td>{{ item.weight }}%</td>
+                            <td>{% if item.score %}{{ item.score }}{% else %}-{% endif %}</td>
+                            <td>{% if item.class_avg %}{{ item.class_avg }}{% else %}-{% endif %}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div>
+                <h4>ÖÇ katkıları</h4>
+                <table class="compact">
+                    <thead>
+                        <tr>
+                            <th>LO</th>
+                            <th>PÇ ilişkisi</th>
+                            <th>Skor</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for lo in enrollment.learning_outcomes %}
+                        <tr>
+                            <td>{{ lo.obj.code }}</td>
+                            <td>
+                                {% for mapping in lo.mappings %}
+                                    <span class="pill small">{{ mapping.program_outcome.code }} ({{ mapping.weight }})</span>
+                                {% empty %}
+                                    <span class="muted">Bağlantı yok</span>
+                                {% endfor %}
+                            </td>
+                            <td>{{ lo.score }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</section>
+
+<section class="panel" id="program-performance">
+    <header class="panel-header">
+        <div>
+            <p class="eyebrow">Program Çıktısına Göre Performans</p>
+            <h2>Çıktı bazlı ilerleme</h2>
+            <p class="muted">LO–PO ağırlıklarıyla hesaplanan öğrenci katkıları.</p>
+        </div>
+    </header>
+    <div class="bar-list">
+        {% for item in po_performance %}
+            <div class="bar-row">
+                <div class="bar-label">
+                    <strong>{{ item.program_outcome.code }}</strong>
+                    <span class="muted">{{ item.program_outcome.title }}</span>
+                </div>
+                <div class="bar">
+                    <span style="width: {{ item.score }}%"></span>
+                </div>
+                <div class="bar-value">{{ item.score }}</div>
+            </div>
+        {% empty %}
+            <p class="muted">Henüz performans verisi yok.</p>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="panel">
+    <header class="panel-header">
+        <div>
+            <p class="eyebrow">UX hedefleri</p>
+            <h2>Öncelikli tasarım ilkeleri</h2>
+        </div>
+    </header>
+    <ul class="plain">
+        <li>Veri girişi için gereken adımları azaltmak.</li>
+        <li>LO–PO ilişkilerini görünür ve kolay yorumlanabilir yapmak.</li>
+        <li>Roller ve çıktılar için tutarlı renk ve ikonlar kullanmak.</li>
+        <li>Estetikten önce açıklığa öncelik vermek — önce işlevsellik.</li>
+    </ul>
+</section>
+{% endblock %}

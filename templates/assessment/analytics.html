@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel">
+    <header class="panel-header">
+        <div>
+            <p class="eyebrow">Veri Paneli</p>
+            <h2>LO–PO bağlantı haritaları</h2>
+            <p class="muted">Dersler ile program çıktıları arasındaki ağırlıkları ısı haritası ve kenar listesiyle inceleyin.</p>
+        </div>
+    </header>
+
+    <div class="card">
+        <h4>Isı haritası: Ders x Program Çıktısı</h4>
+        <div class="heatmap">
+            <div class="heatmap-header">
+                <div class="cell head">Ders</div>
+                {% for po in program_outcomes %}
+                    <div class="cell head">{{ po.code }}</div>
+                {% endfor %}
+            </div>
+            {% for row in heatmap %}
+                <div class="heatmap-row">
+                    <div class="cell head">{{ row.course.code }}</div>
+                    {% for val in row.values %}
+                        <div class="cell" data-value="{{ val.value }}">
+                            <div class="cell-bar" style="width: {{ val.percent }}%"></div>
+                            <span class="cell-value">{{ val.value }} / 5</span>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endfor %}
+        </div>
+        <p class="muted small">Renk ve çubuk uzunluğu, ilgili dersin LO’larının seçili PÇ’ye ortalama ağırlığını gösterir.</p>
+    </div>
+
+    <div class="cards">
+        <article class="card">
+            <h4>LO → PO Kenar Listesi</h4>
+            <div class="edge-list">
+                {% for edge in edges %}
+                    <div class="edge-chip">
+                        <span class="pill small">{{ edge.course.code }}</span>
+                        <strong>{{ edge.lo.code }}</strong>
+                        <span class="arrow">→</span>
+                        <strong>{{ edge.po.code }}</strong>
+                        <span class="badge">{{ edge.weight }}</span>
+                    </div>
+                {% empty %}
+                    <p class="muted">Bağlantı yok.</p>
+                {% endfor %}
+            </div>
+        </article>
+
+        <article class="card">
+            <h4>Not Bileşeni Katkıları</h4>
+            <table class="compact">
+                <thead>
+                    <tr>
+                        <th>Ders</th>
+                        <th>Bileşen</th>
+                        <th>LO</th>
+                        <th>Katkı (%)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for c in contribs %}
+                    <tr>
+                        <td>{{ c.assessment_component.course.code }}</td>
+                        <td>{{ c.assessment_component.name }}</td>
+                        <td>{{ c.learning_outcome.code }}</td>
+                        <td>{{ c.contribution_percent }}%</td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="4" class="muted">Katkı verisi yok.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </article>
+    </div>
+</section>
+{% endblock %}

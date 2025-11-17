@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel">
+    <header class="panel-header">
+        <div>
+            <p class="eyebrow">Veritabanı Şeması</p>
+            <h2>Tablolar, sütunlar ve ilişkiler</h2>
+            <p class="muted">Her modelin alan tipi, null/blank durumu ve diğer tablolara bağlantısı (FK/M2M).</p>
+        </div>
+    </header>
+
+    <div class="schema-list">
+        {% for model in models %}
+        <article class="schema-card">
+            <header>
+                <h4>{{ model.model }}</h4>
+                <span class="muted small">Alan ve ilişkiler</span>
+            </header>
+            <div class="chip-row">
+                {% for field in model.fields %}
+                    <div class="schema-chip">
+                        <div class="chip-main">
+                            <strong>{{ field.name }}</strong>
+                            <span class="muted">{{ field.type }}</span>
+                        </div>
+                        {% if field.relation %}
+                            <div class="chip-relation">
+                                <span class="arrow">↪</span> {{ field.relation }}
+                            </div>
+                        {% else %}
+                            <div class="chip-relation muted">Bağlantı yok</div>
+                        {% endif %}
+                        <div class="chip-flags">
+                            <span class="flag {% if field.null %}ok{% endif %}">Null</span>
+                            <span class="flag {% if field.blank %}ok{% endif %}">Blank</span>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

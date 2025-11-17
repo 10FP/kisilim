@@ -1,0 +1,36 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Öğrenme Çıktıları Değerlendirme</title>
+    <link rel="stylesheet" href="{% static 'assessment/styles.css' %}">
+</head>
+<body>
+    <header class="app-header">
+        <div class="brand">
+            <span class="dot dot-success"></span>
+            <strong>LO–PO</strong> Değerlendirme Sistemi
+        </div>
+        <nav class="menu">
+            <a href="/">Genel Bakış</a>
+            <a href="/student/">Öğrenci Paneli</a>
+            <a href="/instructor/">Öğretmen Paneli</a>
+            <a href="/analytics/">Veri Paneli</a>
+            <a href="/planner/">Ders Seçimi</a>
+            <a href="/schema/">DB Şeması</a>
+        </nav>
+    </header>
+    <main class="container">
+        {% if messages %}
+            <div class="messages">
+                {% for message in messages %}
+                    <div class="message {{ message.tags }}">{{ message }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>
