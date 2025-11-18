@@ -440,6 +440,12 @@ def instructor_panel(request):
     if request.method == "POST" and selected_course:
         form_type = request.POST.get("form_type")
 
+        def parse_id(value):
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return None
+
         if form_type == "course":
             course_form = CourseForm(request.POST, prefix="course")
             if course_form.is_valid():
@@ -468,7 +474,7 @@ def instructor_panel(request):
                 messages.error(request, "LO eklenemedi.")
 
         elif form_type == "component_delete":
-            object_id = request.POST.get("object_id")
+            object_id = parse_id(request.POST.get("object_id"))
             comp = AssessmentComponent.objects.filter(id=object_id, course=selected_course).first()
             if comp:
                 comp.delete()
@@ -476,7 +482,7 @@ def instructor_panel(request):
             component_form = AssessmentComponentForm(prefix="component")
 
         elif form_type == "component":
-            object_id = request.POST.get("object_id")
+            object_id = parse_id(request.POST.get("object_id"))
             instance = AssessmentComponent.objects.filter(id=object_id, course=selected_course).first()
             component_form = AssessmentComponentForm(request.POST, prefix="component", instance=instance)
             if component_form.is_valid():
@@ -488,7 +494,7 @@ def instructor_panel(request):
                 messages.error(request, "Bileşen eklenemedi/düzenlenemedi, alanları kontrol edin.")
 
         elif form_type == "contrib_delete":
-            object_id = request.POST.get("object_id")
+            object_id = parse_id(request.POST.get("object_id"))
             contrib = LearningOutcomeContribution.objects.filter(
                 id=object_id, assessment_component__course=selected_course
             ).first()
@@ -498,7 +504,7 @@ def instructor_panel(request):
             lo_contribution_form = LearningOutcomeContributionForm(prefix="contrib")
 
         elif form_type == "contrib":
-            object_id = request.POST.get("object_id")
+            object_id = parse_id(request.POST.get("object_id"))
             instance = LearningOutcomeContribution.objects.filter(
                 id=object_id, assessment_component__course=selected_course
             ).first()
@@ -512,7 +518,7 @@ def instructor_panel(request):
                 messages.error(request, "ÖÇ katkısı kaydedilemedi.")
 
         elif form_type == "lopo_delete":
-            object_id = request.POST.get("object_id")
+            object_id = parse_id(request.POST.get("object_id"))
             link = LearningOutcomeProgramOutcome.objects.filter(
                 id=object_id, learning_outcome__course=selected_course
             ).first()
@@ -522,7 +528,7 @@ def instructor_panel(request):
             lopo_form = LearningOutcomeProgramOutcomeForm(prefix="lopo")
 
         elif form_type == "lopo":
-            object_id = request.POST.get("object_id")
+            object_id = parse_id(request.POST.get("object_id"))
             instance = LearningOutcomeProgramOutcome.objects.filter(
                 id=object_id, learning_outcome__course=selected_course
             ).first()
