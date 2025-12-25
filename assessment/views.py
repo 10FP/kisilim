@@ -1,8 +1,14 @@
 from collections import defaultdict
+from pathlib import Path
+import re
+import zipfile
+import xml.etree.ElementTree as ET
 
+from django.conf import settings
 from django.db.models import Avg, Max
 from django.shortcuts import render, redirect
 from django.contrib import messages
+from django.http import FileResponse, Http404
 
 from .models import (
     AssessmentComponent,
@@ -616,6 +622,242 @@ def _instructor_context(
         if selected_course
         else [],
     }
+
+
+def _read_xlsx_preview(path: Path, max_rows=None):
+    try:
+        with zipfile.ZipFile(path) as zfile:
+            sheet_names = [name for name in zfile.namelist() if name.startswith("xl/worksheets/sheet")]
+            if not sheet_names:
+                return []
+            sheet = sheet_names[0]
+            shared = []
+            ns = {"a": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+            if "xl/sharedStrings.xml" in zfile.namelist():
+                root = ET.fromstring(zfile.read("xl/sharedStrings.xml"))
+                for item in root.findall("a:si", ns):
+                    texts = [node.text or "" for node in item.findall(".//a:t", ns)]
+                    shared.append("".join(texts))
+            root = ET.fromstring(zfile.read(sheet))
+            rows = root.findall("a:sheetData/a:row", ns)
+            preview = []
+            row_block = rows if max_rows is None else rows[:max_rows]
+            for row in row_block:
+                values = []
+                for cell in row.findall("a:c", ns):
+                    value = cell.find("a:v", ns)
+                    if value is None:
+                        values.append("")
+                        continue
+                    if cell.get("t") == "s":
+                        index = int(value.text)
+                        values.append(shared[index] if index < len(shared) else "")
+                    else:
+                        values.append(value.text)
+                preview.append(values)
+            return preview
+    except Exception:
+        return []
+
+
+def _normalize_header(header):
+    if not header:
+        return ""
+    return header.split("_")[0].strip()
+
+
+def _component_columns(headers):
+    columns = {}
+    pattern = re.compile(r"^(?P<name>.+)\(%(?P<weight>\d+)\)$")
+    for index, header in enumerate(headers):
+        clean = _normalize_header(header)
+        match = pattern.match(clean)
+        if not match:
+            continue
+        weight = int(match.group("weight"))
+        if weight < 0 or weight > 100:
+            continue
+        columns[index] = {"name": match.group("name").strip(), "weight": weight}
+    return columns
+
+
+def _find_header_index(header_map, candidates):
+    for candidate in candidates:
+        if candidate in header_map:
+            return header_map[candidate]
+    return None
+
+
+def grade_template_download(request):
+    template_name = "Sample Excel Format from OBS.xlsx"
+    template_path = Path(settings.BASE_DIR) / template_name
+    if not template_path.exists():
+        raise Http404("Şablon dosyası bulunamadı.")
+    return FileResponse(
+        template_path.open("rb"),
+        as_attachment=True,
+        filename=template_name,
+    )
+
+
+def grade_upload(request):
+    bootstrap_demo_data()
+    courses = Course.objects.all()
+    selected_course = courses.filter(id=request.GET.get("course")).first() or courses.first()
+
+    uploaded_filename = None
+
+    template_name = "Sample Excel Format from OBS.xlsx"
+    template_path = Path(settings.BASE_DIR) / template_name
+    template_available = template_path.exists()
+    table_headers = []
+    table_rows = []
+    raw_headers = []
+    if template_available:
+        raw_rows = _read_xlsx_preview(template_path)
+        if raw_rows:
+            raw_headers = raw_rows[0]
+            table_headers = [_normalize_header(header) for header in raw_headers]
+            header_len = len(table_headers)
+            for row in raw_rows[1:]:
+                if len(row) < header_len:
+                    row = row + [""] * (header_len - len(row))
+                table_rows.append(row[:header_len])
+
+    component_columns = _component_columns(table_headers)
+    numeric_columns = sorted(component_columns.keys())
+
+    if request.method == "POST":
+        selected_course = courses.filter(id=request.POST.get("course")).first() or selected_course
+        form_type = request.POST.get("form_type")
+        if form_type == "upload":
+            uploaded = request.FILES.get("grades_file")
+            if uploaded:
+                uploaded_filename = uploaded.name
+                messages.success(request, f"Dosya alındı: {uploaded.name} (işleme alınmadı).")
+            else:
+                messages.error(request, "Lütfen bir Excel dosyası seçin.")
+        elif form_type == "save_grades" and selected_course:
+            try:
+                row_count = int(request.POST.get("row_count", 0))
+                col_count = int(request.POST.get("col_count", len(table_headers)))
+            except ValueError:
+                row_count = 0
+                col_count = len(table_headers)
+            if not table_headers and col_count:
+                table_headers = [request.POST.get(f"header_{idx}", "") for idx in range(col_count)]
+
+            table_rows = []
+            for row_index in range(row_count):
+                row = []
+                for col_index in range(col_count):
+                    row.append(request.POST.get(f"cell_{row_index}_{col_index}", "").strip())
+                table_rows.append(row)
+
+            if not table_headers:
+                messages.error(request, "Tablo başlıkları bulunamadı; kayıt yapılamadı.")
+            else:
+                component_columns = _component_columns(table_headers)
+                numeric_columns = sorted(component_columns.keys())
+                component_map = {}
+                for col_index, info in component_columns.items():
+                    component, _ = AssessmentComponent.objects.get_or_create(
+                        course=selected_course, name=info["name"]
+                    )
+                    if component.weight_percent != info["weight"]:
+                        component.weight_percent = info["weight"]
+                        component.save(update_fields=["weight_percent"])
+                    component_map[col_index] = component
+
+                header_map = {_normalize_header(header): idx for idx, header in enumerate(table_headers)}
+                student_no_idx = _find_header_index(
+                    header_map, ["Öğrenci No", "Ogrenci No", "Student No"]
+                )
+                name_idx = _find_header_index(header_map, ["Adı", "Adi", "Name"])
+                surname_idx = _find_header_index(header_map, ["Soyadı", "Soyadi", "Surname"])
+                class_idx = _find_header_index(header_map, ["Snf", "Sınıf", "Sinif", "Class"])
+                entry_idx = _find_header_index(
+                    header_map, ["Girme Durum", "Girme Durumu", "Entry Status"]
+                )
+                letter_idx = _find_header_index(
+                    header_map, ["Harf Notu", "Harf Not", "Letter Grade"]
+                )
+
+                if student_no_idx is None:
+                    messages.error(request, "Öğrenci No sütunu bulunamadı; kayıt yapılamadı.")
+                else:
+                    updated = 0
+                    for row in table_rows:
+                        if student_no_idx >= len(row):
+                            continue
+                        student_number = row[student_no_idx].strip()
+                        if not student_number:
+                            continue
+
+                        first = row[name_idx].strip() if name_idx is not None and name_idx < len(row) else ""
+                        last = row[surname_idx].strip() if surname_idx is not None and surname_idx < len(row) else ""
+                        full_name = f"{first} {last}".strip()
+
+                        student, _ = Student.objects.get_or_create(
+                            student_number=student_number,
+                            defaults={"full_name": full_name or student_number},
+                        )
+                        if full_name and student.full_name != full_name:
+                            student.full_name = full_name
+                            student.save(update_fields=["full_name"])
+
+                        enrollment = Enrollment.objects.filter(
+                            student=student, course=selected_course
+                        ).first()
+                        if not enrollment:
+                            enrollment = Enrollment.objects.create(
+                                student=student, course=selected_course, year=2023
+                            )
+
+                        if class_idx is not None and class_idx < len(row):
+                            class_val = row[class_idx].strip()
+                            enrollment.class_level = int(class_val) if class_val.isdigit() else None
+                        if entry_idx is not None and entry_idx < len(row):
+                            enrollment.entry_status = row[entry_idx].strip()
+                        if letter_idx is not None and letter_idx < len(row):
+                            enrollment.letter_grade = row[letter_idx].strip()
+                        enrollment.save()
+
+                        for col_index, component in component_map.items():
+                            if col_index >= len(row):
+                                continue
+                            raw_score = row[col_index].strip()
+                            if not raw_score:
+                                continue
+                            try:
+                                score = float(raw_score.replace(",", "."))
+                            except ValueError:
+                                continue
+                            assessment, _ = StudentAssessment.objects.get_or_create(
+                                enrollment=enrollment, assessment_component=component
+                            )
+                            if assessment.score != score:
+                                assessment.score = score
+                                assessment.save(update_fields=["score"])
+                        updated += 1
+                    messages.success(
+                        request,
+                        f"Notlar kaydedildi. Güncellenen öğrenci sayısı: {updated}",
+                    )
+
+    context = {
+        "courses": courses,
+        "selected_course": selected_course,
+        "uploaded_filename": uploaded_filename,
+        "template_available": template_available,
+        "template_name": template_name,
+        "table_headers": table_headers,
+        "table_rows": table_rows,
+        "numeric_columns": numeric_columns,
+        "row_count": len(table_rows),
+        "col_count": len(table_headers),
+    }
+    return render(request, "assessment/grade_upload.html", context)
 
 
 def analytics_panel(request):

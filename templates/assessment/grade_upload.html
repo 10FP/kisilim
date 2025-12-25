@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel">
+    <header class="panel-header">
+        <div>
+            <p class="eyebrow">Not Verme</p>
+            <h2>Excel ile not girişi</h2>
+            <p class="muted">Şimdilik sadece dosya yükleme ve format görüntüleme amaçlıdır.</p>
+        </div>
+        <form method="get" class="inline-form">
+            <label>
+                Ders
+                <select name="course">
+                    {% for c in courses %}
+                        <option value="{{ c.id }}" {% if selected_course and c.id == selected_course.id %}selected{% endif %}>{{ c.code }} - {{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <button type="submit">Seç</button>
+        </form>
+    </header>
+
+    <div class="grid">
+        <div class="card">
+            <h4>Excel dosyası yükle</h4>
+            <p class="muted small">Dosya yüklenir ancak henüz veritabanına işlenmez.</p>
+            <form method="post" enctype="multipart/form-data" class="form-grid">
+                {% csrf_token %}
+                <input type="hidden" name="form_type" value="upload">
+                {% if selected_course %}
+                    <input type="hidden" name="course" value="{{ selected_course.id }}">
+                {% endif %}
+                <label class="form-field">
+                    <span>Excel dosyası</span>
+                    <input type="file" name="grades_file" accept=".xlsx,.xls">
+                </label>
+                <div class="action-group">
+                    <button type="submit" class="btn primary">Yükle</button>
+                </div>
+            </form>
+            {% if uploaded_filename %}
+                <div class="note">Yüklenen dosya: {{ uploaded_filename }}</div>
+            {% endif %}
+        </div>
+
+        <div class="card">
+            <h4>Örnek Excel formatı</h4>
+            <p class="muted small">OBS formatındaki örnek öğrenci listesi ana klasörde yer alır.</p>
+            {% if template_available %}
+                <a class="btn ghost" href="{% url 'assessment:grade_template_download' %}">Excel şablonunu indir</a>
+                <div class="muted small">{{ template_name }}</div>
+            {% else %}
+                <p class="muted">Şablon dosyası bulunamadı.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if table_headers %}
+        <form method="post" id="grade-save-form" class="grade-table-form">
+            {% csrf_token %}
+            <input type="hidden" name="form_type" value="save_grades">
+            {% if selected_course %}
+                <input type="hidden" name="course" value="{{ selected_course.id }}">
+            {% endif %}
+            <input type="hidden" name="row_count" value="{{ row_count }}">
+            <input type="hidden" name="col_count" value="{{ col_count }}">
+            {% for header in table_headers %}
+                <input type="hidden" name="header_{{ forloop.counter0 }}" value="{{ header }}">
+            {% endfor %}
+
+            <div class="card">
+                <h4>Şablon önizleme (düzenlenebilir)</h4>
+                <div class="table-wrapper">
+                    <table class="compact grade-table">
+                        <thead>
+                            <tr>
+                                {% for header in table_headers %}
+                                    <th>{{ header }}</th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in table_rows %}
+                                <tr>
+                                    {% for cell in row %}
+                                        <td>
+                                            {% if forloop.counter0 in numeric_columns %}
+                                                <input type="number" step="0.01" name="cell_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}" value="{{ cell }}">
+                                            {% else %}
+                                                <input type="text" name="cell_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}" value="{{ cell }}">
+                                            {% endif %}
+                                        </td>
+                                    {% endfor %}
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </form>
+        <button type="submit" class="btn primary fixed-save" form="grade-save-form">Kaydet</button>
+    {% endif %}
+</section>
+{% endblock %}

@@ -72,6 +72,9 @@ class Enrollment(models.Model):
     course = models.ForeignKey(Course, related_name="enrollments", on_delete=models.CASCADE)
     year = models.PositiveSmallIntegerField(default=2023)
     section = models.CharField(max_length=10, blank=True)
+    class_level = models.PositiveSmallIntegerField(null=True, blank=True)
+    entry_status = models.CharField(max_length=20, blank=True)
+    letter_grade = models.CharField(max_length=10, blank=True)
     RESULT_CHOICES = (
         ("in_progress", "Devam"),
         ("passed", "Geçti"),

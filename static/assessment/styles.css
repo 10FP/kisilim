@@ -84,6 +84,7 @@ a { color: var(--primary); text-decoration: none; }
 }
 .card h3 { margin-top: 0; }
 .muted { color: var(--muted); }
+.small { font-size: 0.85rem; }
 .plain { padding-left: 1rem; margin: 0.5rem 0 0; color: var(--text); }
 .plain li { margin-bottom: 0.35rem; }
 
@@ -100,6 +101,16 @@ a { color: var(--primary); text-decoration: none; }
 table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
 th, td { text-align: left; padding: 0.65rem; border-bottom: 1px solid var(--border); }
 th { font-size: 0.9rem; color: var(--muted); }
+table.grade-table th { position: sticky; top: 0; background: #f1f5f9; z-index: 1; }
+table.grade-table td { padding: 0.25rem; }
+table.grade-table input {
+    width: 100%;
+    padding: 0.35rem 0.4rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #fff;
+    font-size: 0.85rem;
+}
 
 .two-col { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; align-items: start; }
 .side-panel {
@@ -185,6 +196,13 @@ th { font-size: 0.9rem; color: var(--muted); }
 .chip-flags { display: flex; gap: 0.35rem; }
 .flag { padding: 0.15rem 0.4rem; border-radius: 8px; border: 1px solid var(--border); font-size: 0.75rem; color: var(--muted); }
 .flag.ok { background: #dcfce7; color: #15803d; border-color: #bbf7d0; }
+.fixed-save {
+    position: fixed;
+    right: 1.5rem;
+    bottom: 1.5rem;
+    z-index: 40;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+}
 
 @media (max-width: 768px) {
     .hero { flex-direction: column; }
