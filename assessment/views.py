@@ -1,4 +1,5 @@
 from collections import defaultdict
+import io
 from pathlib import Path
 import re
 import zipfile
@@ -8,7 +9,8 @@ from django.conf import settings
 from django.db.models import Avg, Max
 from django.shortcuts import render, redirect
 from django.contrib import messages
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, JsonResponse
+from django.views.decorators.http import require_POST
 
 from .models import (
     AssessmentComponent,
@@ -624,38 +626,50 @@ def _instructor_context(
     }
 
 
+def _read_xlsx_preview_from_zip(zfile, max_rows=None):
+    sheet_names = [name for name in zfile.namelist() if name.startswith("xl/worksheets/sheet")]
+    if not sheet_names:
+        return []
+    sheet = sheet_names[0]
+    shared = []
+    ns = {"a": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    if "xl/sharedStrings.xml" in zfile.namelist():
+        root = ET.fromstring(zfile.read("xl/sharedStrings.xml"))
+        for item in root.findall("a:si", ns):
+            texts = [node.text or "" for node in item.findall(".//a:t", ns)]
+            shared.append("".join(texts))
+    root = ET.fromstring(zfile.read(sheet))
+    rows = root.findall("a:sheetData/a:row", ns)
+    preview = []
+    row_block = rows if max_rows is None else rows[:max_rows]
+    for row in row_block:
+        values = []
+        for cell in row.findall("a:c", ns):
+            value = cell.find("a:v", ns)
+            if value is None:
+                values.append("")
+                continue
+            if cell.get("t") == "s":
+                index = int(value.text)
+                values.append(shared[index] if index < len(shared) else "")
+            else:
+                values.append(value.text)
+        preview.append(values)
+    return preview
+
+
 def _read_xlsx_preview(path: Path, max_rows=None):
     try:
         with zipfile.ZipFile(path) as zfile:
-            sheet_names = [name for name in zfile.namelist() if name.startswith("xl/worksheets/sheet")]
-            if not sheet_names:
-                return []
-            sheet = sheet_names[0]
-            shared = []
-            ns = {"a": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
-            if "xl/sharedStrings.xml" in zfile.namelist():
-                root = ET.fromstring(zfile.read("xl/sharedStrings.xml"))
-                for item in root.findall("a:si", ns):
-                    texts = [node.text or "" for node in item.findall(".//a:t", ns)]
-                    shared.append("".join(texts))
-            root = ET.fromstring(zfile.read(sheet))
-            rows = root.findall("a:sheetData/a:row", ns)
-            preview = []
-            row_block = rows if max_rows is None else rows[:max_rows]
-            for row in row_block:
-                values = []
-                for cell in row.findall("a:c", ns):
-                    value = cell.find("a:v", ns)
-                    if value is None:
-                        values.append("")
-                        continue
-                    if cell.get("t") == "s":
-                        index = int(value.text)
-                        values.append(shared[index] if index < len(shared) else "")
-                    else:
-                        values.append(value.text)
-                preview.append(values)
-            return preview
+            return _read_xlsx_preview_from_zip(zfile, max_rows=max_rows)
+    except Exception:
+        return []
+
+
+def _read_xlsx_preview_from_bytes(data, max_rows=None):
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as zfile:
+            return _read_xlsx_preview_from_zip(zfile, max_rows=max_rows)
     except Exception:
         return []
 
@@ -697,6 +711,36 @@ def grade_template_download(request):
         template_path.open("rb"),
         as_attachment=True,
         filename=template_name,
+    )
+
+
+@require_POST
+def grade_preview(request):
+    uploaded = request.FILES.get("grades_file")
+    if not uploaded:
+        return JsonResponse({"error": "Excel dosyası bulunamadı."}, status=400)
+
+    preview = _read_xlsx_preview_from_bytes(uploaded.read())
+    if not preview:
+        return JsonResponse({"error": "Excel dosyası okunamadı. Lütfen .xlsx formatı kullanın."}, status=400)
+
+    raw_headers = preview[0]
+    headers = [_normalize_header(header) for header in raw_headers]
+    header_len = len(headers)
+    rows = []
+    for row in preview[1:]:
+        if len(row) < header_len:
+            row = row + [""] * (header_len - len(row))
+        rows.append(row[:header_len])
+
+    numeric_columns = sorted(_component_columns(headers).keys())
+    return JsonResponse(
+        {
+            "filename": uploaded.name,
+            "headers": headers,
+            "rows": rows,
+            "numeric_columns": numeric_columns,
+        }
     )
 
 

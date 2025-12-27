@@ -85,6 +85,7 @@ a { color: var(--primary); text-decoration: none; }
 .card h3 { margin-top: 0; }
 .muted { color: var(--muted); }
 .small { font-size: 0.85rem; }
+.hidden { display: none !important; }
 .plain { padding-left: 1rem; margin: 0.5rem 0 0; color: var(--text); }
 .plain li { margin-bottom: 0.35rem; }
 
@@ -110,6 +111,38 @@ table.grade-table input {
     border-radius: 6px;
     background: #fff;
     font-size: 0.85rem;
+}
+.loader-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.35);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 60;
+}
+.loader-overlay.active { display: flex; }
+.loader-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 1.25rem 1.5rem;
+    display: grid;
+    gap: 0.6rem;
+    align-items: center;
+    justify-items: center;
+    min-width: 220px;
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.2);
+}
+.spinner {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 3px solid #cbd5f5;
+    border-top-color: #2563eb;
+    animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+    to { transform: rotate(360deg); }
 }
 
 .two-col { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; align-items: start; }
@@ -203,6 +236,7 @@ table.grade-table input {
     z-index: 40;
     box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
 }
+.card-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
 
 @media (max-width: 768px) {
     .hero { flex-direction: column; }

@@ -22,10 +22,10 @@
     </header>
 
     <div class="grid">
-        <div class="card">
+        <div class="card" id="grade-upload-card">
             <h4>Excel dosyası yükle</h4>
             <p class="muted small">Dosya yüklenir ancak henüz veritabanına işlenmez.</p>
-            <form method="post" enctype="multipart/form-data" class="form-grid">
+            <form method="post" enctype="multipart/form-data" class="form-grid" id="grade-upload-form">
                 {% csrf_token %}
                 <input type="hidden" name="form_type" value="upload">
                 {% if selected_course %}
@@ -33,7 +33,7 @@
                 {% endif %}
                 <label class="form-field">
                     <span>Excel dosyası</span>
-                    <input type="file" name="grades_file" accept=".xlsx,.xls">
+                    <input type="file" name="grades_file" accept=".xlsx,.xls" id="grade-file-input">
                 </label>
                 <div class="action-group">
                     <button type="submit" class="btn primary">Yükle</button>
@@ -42,6 +42,7 @@
             {% if uploaded_filename %}
                 <div class="note">Yüklenen dosya: {{ uploaded_filename }}</div>
             {% endif %}
+            <div class="note hidden" id="upload-status"></div>
         </div>
 
         <div class="card">
@@ -56,50 +57,229 @@
         </div>
     </div>
 
-    {% if table_headers %}
-        <form method="post" id="grade-save-form" class="grade-table-form">
+    <div class="loader-overlay" id="grade-loader">
+        <div class="loader-card">
+            <div class="spinner"></div>
+            <div class="muted">Excel işleniyor...</div>
+        </div>
+    </div>
+
+    <form method="post" id="grade-save-form" class="grade-table-form">
             {% csrf_token %}
             <input type="hidden" name="form_type" value="save_grades">
             {% if selected_course %}
                 <input type="hidden" name="course" value="{{ selected_course.id }}">
             {% endif %}
-            <input type="hidden" name="row_count" value="{{ row_count }}">
-            <input type="hidden" name="col_count" value="{{ col_count }}">
-            {% for header in table_headers %}
-                <input type="hidden" name="header_{{ forloop.counter0 }}" value="{{ header }}">
-            {% endfor %}
+            <input type="hidden" name="row_count" value="{{ row_count }}" id="row-count">
+            <input type="hidden" name="col_count" value="{{ col_count }}" id="col-count">
+            <div id="grade-hidden-headers">
+                {% for header in table_headers %}
+                    <input type="hidden" name="header_{{ forloop.counter0 }}" value="{{ header }}">
+                {% endfor %}
+            </div>
 
-            <div class="card">
-                <h4>Şablon önizleme (düzenlenebilir)</h4>
-                <div class="table-wrapper">
-                    <table class="compact grade-table">
-                        <thead>
-                            <tr>
-                                {% for header in table_headers %}
-                                    <th>{{ header }}</th>
-                                {% endfor %}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for row in table_rows %}
+            <div class="card" id="grade-table-card">
+                <div class="card-head">
+                    <h4>Şablon önizleme (düzenlenebilir)</h4>
+                    <div class="action-group">
+                        <button type="button" class="btn ghost" id="random-fill-button">Rastgele notlar doldur</button>
+                    </div>
+                </div>
+                <div class="table-wrapper" id="grade-table-container" data-numeric-columns="{{ numeric_columns|join:',' }}">
+                    {% if table_headers %}
+                        <table class="compact grade-table">
+                            <thead>
                                 <tr>
-                                    {% for cell in row %}
-                                        <td>
-                                            {% if forloop.counter0 in numeric_columns %}
-                                                <input type="number" step="0.01" name="cell_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}" value="{{ cell }}">
-                                            {% else %}
-                                                <input type="text" name="cell_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}" value="{{ cell }}">
-                                            {% endif %}
-                                        </td>
+                                    {% for header in table_headers %}
+                                        <th>{{ header }}</th>
                                     {% endfor %}
                                 </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                {% for row in table_rows %}
+                                    <tr>
+                                        {% for cell in row %}
+                                            <td>
+                                                {% if forloop.counter0 in numeric_columns %}
+                                                    <input type="number" step="0.01" name="cell_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}" value="{{ cell }}">
+                                                {% else %}
+                                                    <input type="text" name="cell_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}" value="{{ cell }}">
+                                                {% endif %}
+                                            </td>
+                                        {% endfor %}
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    {% else %}
+                        <p class="muted">Önizleme için bir Excel yükleyin.</p>
+                    {% endif %}
                 </div>
             </div>
         </form>
-        <button type="submit" class="btn primary fixed-save" form="grade-save-form">Kaydet</button>
-    {% endif %}
+        <button type="submit" class="btn primary fixed-save {% if not table_headers %}hidden{% endif %}" form="grade-save-form" id="grade-save-button">Kaydet</button>
 </section>
+
+<script>
+const uploadForm = document.getElementById("grade-upload-form");
+const fileInput = document.getElementById("grade-file-input");
+const loader = document.getElementById("grade-loader");
+const statusNote = document.getElementById("upload-status");
+const tableContainer = document.getElementById("grade-table-container");
+const headersContainer = document.getElementById("grade-hidden-headers");
+const rowCountInput = document.getElementById("row-count");
+const colCountInput = document.getElementById("col-count");
+const saveButton = document.getElementById("grade-save-button");
+const randomFillButton = document.getElementById("random-fill-button");
+let currentNumericColumns = [];
+
+const previewUrl = "{% url 'assessment:grade_preview' %}";
+
+const getCookie = (name) => {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) {
+        return parts.pop().split(";").shift();
+    }
+    return "";
+};
+
+const setStatus = (message, show = true) => {
+    if (!statusNote) return;
+    statusNote.textContent = message;
+    statusNote.classList.toggle("hidden", !show);
+};
+
+const setLoading = (isLoading) => {
+    if (!loader) return;
+    loader.classList.toggle("active", isLoading);
+};
+
+const buildTable = (headers, rows, numericColumns) => {
+    const numericSet = new Set(numericColumns || []);
+    currentNumericColumns = numericColumns || [];
+    const headerCount = headers.length;
+    headersContainer.innerHTML = "";
+    headers.forEach((header, index) => {
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = `header_${index}`;
+        input.value = header;
+        headersContainer.appendChild(input);
+    });
+    rowCountInput.value = rows.length;
+    colCountInput.value = headerCount;
+
+    const table = document.createElement("table");
+    table.className = "compact grade-table";
+    const thead = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    headers.forEach((header) => {
+        const th = document.createElement("th");
+        th.textContent = header;
+        headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    rows.forEach((row, rowIndex) => {
+        const tr = document.createElement("tr");
+        for (let colIndex = 0; colIndex < headerCount; colIndex += 1) {
+            const td = document.createElement("td");
+            const input = document.createElement("input");
+            const cellValue = row[colIndex] || "";
+            input.name = `cell_${rowIndex}_${colIndex}`;
+            input.value = cellValue;
+            if (numericSet.has(colIndex)) {
+                input.type = "number";
+                input.step = "0.01";
+            } else {
+                input.type = "text";
+            }
+            td.appendChild(input);
+            tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    tableContainer.innerHTML = "";
+    tableContainer.appendChild(table);
+    saveButton.classList.remove("hidden");
+};
+
+const fillRandomScores = () => {
+    if (!currentNumericColumns.length) {
+        return;
+    }
+    const inputs = tableContainer.querySelectorAll("input");
+    inputs.forEach((input) => {
+        const parts = input.name.split("_");
+        if (parts.length < 3) return;
+        const colIndex = Number(parts[2]);
+        if (!Number.isInteger(colIndex)) return;
+        if (!currentNumericColumns.includes(colIndex)) return;
+        if (input.value) return;
+        const score = Math.floor(Math.random() * 41) + 60;
+        input.value = score.toString();
+    });
+};
+
+const handlePreview = async () => {
+    const file = fileInput.files[0];
+    if (!file) {
+        setStatus("Lütfen bir Excel dosyası seçin.", true);
+        return;
+    }
+    setStatus("", false);
+    setLoading(true);
+    const startedAt = Date.now();
+    const formData = new FormData();
+    formData.append("grades_file", file);
+    try {
+        const response = await fetch(previewUrl, {
+            method: "POST",
+            headers: { "X-CSRFToken": getCookie("csrftoken") },
+            body: formData,
+        });
+        const payload = await response.json();
+        if (!response.ok || payload.error) {
+            throw new Error(payload.error || "Excel önizleme hatası.");
+        }
+        buildTable(payload.headers, payload.rows, payload.numeric_columns);
+        setStatus(`Önizleme yüklendi: ${payload.filename}`, true);
+    } catch (err) {
+        setStatus(err.message, true);
+    } finally {
+        const elapsed = Date.now() - startedAt;
+        const remaining = Math.max(0, 2000 - elapsed);
+        setTimeout(() => {
+            setLoading(false);
+        }, remaining);
+    }
+};
+
+if (tableContainer && tableContainer.dataset.numericColumns) {
+    currentNumericColumns = tableContainer.dataset.numericColumns
+        .split(",")
+        .filter(Boolean)
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value));
+}
+
+if (uploadForm) {
+    uploadForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        handlePreview();
+    });
+}
+if (fileInput) {
+    fileInput.addEventListener("change", () => {
+        handlePreview();
+    });
+}
+if (randomFillButton) {
+    randomFillButton.addEventListener("click", fillRandomScores);
+}
+</script>
 {% endblock %}
