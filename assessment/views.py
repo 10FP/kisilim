@@ -1,11 +1,15 @@
 from collections import defaultdict
+from datetime import datetime
 import io
 from pathlib import Path
 import re
+import shutil
 import zipfile
 import xml.etree.ElementTree as ET
 
 from django.conf import settings
+from django.core.cache import cache
+from django.db import transaction
 from django.db.models import Avg, Count, Max
 from django.shortcuts import render, redirect
 from django.contrib import messages
@@ -15,6 +19,7 @@ from django.views.decorators.http import require_POST
 from .models import (
     AssessmentComponent,
     Course,
+    CoursePOHeatmap,
     Enrollment,
     LearningOutcome,
     LearningOutcomeContribution,
@@ -465,6 +470,7 @@ def instructor_panel(request):
                 new_course = course_form.save()
                 selected_course = new_course
                 messages.success(request, f"Ders oluşturuldu: {new_course.code}")
+                _backup_database()
             else:
                 messages.error(request, "Ders oluşturulamadı.")
 
@@ -473,6 +479,7 @@ def instructor_panel(request):
             if program_outcome_form.is_valid():
                 po = program_outcome_form.save()
                 messages.success(request, f"PÇ eklendi: {po.code}")
+                _backup_database()
             else:
                 messages.error(request, "PÇ eklenemedi.")
 
@@ -481,6 +488,7 @@ def instructor_panel(request):
             if student_form.is_valid():
                 student = student_form.save()
                 messages.success(request, f"Öğrenci eklendi: {student.full_name}")
+                _backup_database()
             else:
                 messages.error(request, "Öğrenci eklenemedi.")
 
@@ -490,6 +498,7 @@ def instructor_panel(request):
             if student:
                 student.delete()
                 messages.success(request, "Öğrenci silindi.")
+                _backup_database()
             else:
                 messages.error(request, "Öğrenci silinemedi.")
 
@@ -501,6 +510,7 @@ def instructor_panel(request):
                 try:
                     enrollment.save()
                     messages.success(request, "Öğrenci derse eklendi.")
+                    _backup_database()
                 except Exception:
                     messages.error(request, "Bu öğrenci zaten bu derse kayıtlı olabilir.")
             else:
@@ -512,6 +522,7 @@ def instructor_panel(request):
             if enrollment:
                 enrollment.delete()
                 messages.success(request, "Ders kaydı silindi.")
+                _backup_database()
             else:
                 messages.error(request, "Ders kaydı silinemedi.")
 
@@ -522,6 +533,7 @@ def instructor_panel(request):
                 lo.course = selected_course
                 lo.save()
                 messages.success(request, f"LO eklendi: {lo.code}")
+                _backup_database()
             else:
                 messages.error(request, "LO eklenemedi.")
 
@@ -531,6 +543,7 @@ def instructor_panel(request):
             if comp:
                 comp.delete()
                 messages.success(request, f"Bileşen silindi: {comp.name}")
+                _backup_database()
             component_form = AssessmentComponentForm(prefix="component")
 
         elif form_type == "component":
@@ -542,6 +555,7 @@ def instructor_panel(request):
                 comp.course = selected_course
                 comp.save()
                 messages.success(request, f"Bileşen kaydedildi: {comp.name}")
+                _backup_database()
             else:
                 messages.error(request, "Bileşen eklenemedi/düzenlenemedi, alanları kontrol edin.")
 
@@ -553,6 +567,7 @@ def instructor_panel(request):
             if contrib:
                 contrib.delete()
                 messages.success(request, "ÖÇ katkısı silindi.")
+                _backup_database()
             lo_contribution_form = LearningOutcomeContributionForm(prefix="contrib")
 
         elif form_type == "contrib":
@@ -566,6 +581,7 @@ def instructor_panel(request):
             if lo_contribution_form.is_valid():
                 lo_contribution_form.save()
                 messages.success(request, "ÖÇ katkısı kaydedildi.")
+                _backup_database()
             else:
                 messages.error(request, "ÖÇ katkısı kaydedilemedi.")
 
@@ -577,6 +593,7 @@ def instructor_panel(request):
             if link:
                 link.delete()
                 messages.success(request, "LO–PO ağırlığı silindi.")
+                _backup_database()
             lopo_form = LearningOutcomeProgramOutcomeForm(prefix="lopo")
 
         elif form_type == "lopo":
@@ -589,10 +606,13 @@ def instructor_panel(request):
             if lopo_form.is_valid():
                 lopo_form.save()
                 messages.success(request, "LO–PO ağırlığı kaydedildi.")
+                _backup_database()
             else:
                 messages.error(request, "LO–PO ağırlığı kaydedilemedi.")
 
         limit_forms(selected_course)
+        _update_po_heatmap()
+        cache.delete("analytics_panel_v1")
 
         return render(
             request,
@@ -758,6 +778,41 @@ def _find_header_index(header_map, candidates):
     return None
 
 
+def _backup_database():
+    db_path = Path(settings.DATABASES["default"]["NAME"])
+    if not db_path.exists():
+        return
+    backup_dir = Path(settings.BASE_DIR) / "db_backups"
+    backup_dir.mkdir(exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_path = backup_dir / f"db_{timestamp}.sqlite3"
+    shutil.copy2(db_path, backup_path)
+
+
+def _update_po_heatmap(courses=None, program_outcomes=None):
+    courses = courses or list(Course.objects.all())
+    program_outcomes = program_outcomes or list(ProgramOutcome.objects.all())
+    links = list(
+        LearningOutcomeProgramOutcome.objects.select_related(
+            "learning_outcome", "program_outcome", "learning_outcome__course"
+        ).all()
+    )
+    for course in courses:
+        for po in program_outcomes:
+            weights = [
+                link.weight
+                for link in links
+                if link.learning_outcome.course_id == course.id and link.program_outcome_id == po.id
+            ]
+            avg_weight = round(sum(weights) / len(weights), 2) if weights else 0
+            percent = int((avg_weight / 5) * 100) if avg_weight else 0
+            CoursePOHeatmap.objects.update_or_create(
+                course=course,
+                program_outcome=po,
+                defaults={"avg_weight": avg_weight, "percent": percent},
+            )
+
+
 def _split_name(full_name):
     if not full_name:
         return "", ""
@@ -900,103 +955,106 @@ def grade_upload(request):
             if not table_headers:
                 messages.error(request, "Tablo başlıkları bulunamadı; kayıt yapılamadı.")
             else:
-                component_columns = _component_columns(table_headers)
-                numeric_columns = sorted(component_columns.keys())
-                if component_columns:
-                    expected_names = {info["name"] for info in component_columns.values()}
-                    removed_qs = AssessmentComponent.objects.filter(course=selected_course).exclude(
-                        name__in=expected_names
-                    )
-                    removed_count = removed_qs.count()
-                    if removed_count:
-                        removed_qs.delete()
-                        messages.info(request, f"Excel'de olmayan {removed_count} bileşen kaldırıldı.")
-                component_map = {}
-                for col_index, info in component_columns.items():
-                    component, _ = AssessmentComponent.objects.get_or_create(
-                        course=selected_course, name=info["name"]
-                    )
-                    if component.weight_percent != info["weight"]:
-                        component.weight_percent = info["weight"]
-                        component.save(update_fields=["weight_percent"])
-                    component_map[col_index] = component
-
-                header_map = {_normalize_header(header): idx for idx, header in enumerate(table_headers)}
-                student_no_idx = _find_header_index(
-                    header_map, ["Öğrenci No", "Ogrenci No", "Student No"]
-                )
-                name_idx = _find_header_index(header_map, ["Adı", "Adi", "Name"])
-                surname_idx = _find_header_index(header_map, ["Soyadı", "Soyadi", "Surname"])
-                class_idx = _find_header_index(header_map, ["Snf", "Sınıf", "Sinif", "Class"])
-                entry_idx = _find_header_index(
-                    header_map, ["Girme Durum", "Girme Durumu", "Entry Status"]
-                )
-                letter_idx = _find_header_index(
-                    header_map, ["Harf Notu", "Harf Not", "Letter Grade"]
-                )
-
-                if student_no_idx is None:
-                    messages.error(request, "Öğrenci No sütunu bulunamadı; kayıt yapılamadı.")
-                else:
-                    updated = 0
-                    for row in table_rows:
-                        if student_no_idx >= len(row):
-                            continue
-                        student_number = row[student_no_idx].strip()
-                        if not student_number:
-                            continue
-
-                        first = row[name_idx].strip() if name_idx is not None and name_idx < len(row) else ""
-                        last = row[surname_idx].strip() if surname_idx is not None and surname_idx < len(row) else ""
-                        full_name = f"{first} {last}".strip()
-
-                        student, _ = Student.objects.get_or_create(
-                            student_number=student_number,
-                            defaults={"full_name": full_name or student_number},
+                with transaction.atomic():
+                    component_columns = _component_columns(table_headers)
+                    numeric_columns = sorted(component_columns.keys())
+                    if component_columns:
+                        expected_names = {info["name"] for info in component_columns.values()}
+                        removed_qs = AssessmentComponent.objects.filter(course=selected_course).exclude(
+                            name__in=expected_names
                         )
-                        if full_name and student.full_name != full_name:
-                            student.full_name = full_name
-                            student.save(update_fields=["full_name"])
+                        removed_count = removed_qs.count()
+                        if removed_count:
+                            removed_qs.delete()
+                            messages.info(request, f"Excel'de olmayan {removed_count} bileşen kaldırıldı.")
+                    component_map = {}
+                    for col_index, info in component_columns.items():
+                        component, _ = AssessmentComponent.objects.get_or_create(
+                            course=selected_course, name=info["name"]
+                        )
+                        if component.weight_percent != info["weight"]:
+                            component.weight_percent = info["weight"]
+                            component.save(update_fields=["weight_percent"])
+                        component_map[col_index] = component
 
-                        enrollment = Enrollment.objects.filter(
-                            student=student, course=selected_course
-                        ).first()
-                        if not enrollment:
-                            enrollment = Enrollment.objects.create(
-                                student=student, course=selected_course, year=2023
-                            )
-
-                        if class_idx is not None and class_idx < len(row):
-                            class_val = row[class_idx].strip()
-                            enrollment.class_level = int(class_val) if class_val.isdigit() else None
-                        if entry_idx is not None and entry_idx < len(row):
-                            enrollment.entry_status = row[entry_idx].strip()
-                        if letter_idx is not None and letter_idx < len(row):
-                            enrollment.letter_grade = row[letter_idx].strip()
-                        enrollment.save()
-
-                        for col_index, component in component_map.items():
-                            if col_index >= len(row):
-                                continue
-                            raw_score = row[col_index].strip()
-                            if not raw_score:
-                                continue
-                            try:
-                                score = float(raw_score.replace(",", "."))
-                            except ValueError:
-                                continue
-                            assessment, _ = StudentAssessment.objects.get_or_create(
-                                enrollment=enrollment, assessment_component=component
-                            )
-                            if assessment.score != score:
-                                assessment.score = score
-                                assessment.save(update_fields=["score"])
-                        updated += 1
-                    messages.success(
-                        request,
-                        f"Notlar kaydedildi. Güncellenen öğrenci sayısı: {updated}",
+                    header_map = {_normalize_header(header): idx for idx, header in enumerate(table_headers)}
+                    student_no_idx = _find_header_index(
+                        header_map, ["Öğrenci No", "Ogrenci No", "Student No"]
                     )
+                    name_idx = _find_header_index(header_map, ["Adı", "Adi", "Name"])
+                    surname_idx = _find_header_index(header_map, ["Soyadı", "Soyadi", "Surname"])
+                    class_idx = _find_header_index(header_map, ["Snf", "Sınıf", "Sinif", "Class"])
+                    entry_idx = _find_header_index(
+                        header_map, ["Girme Durum", "Girme Durumu", "Entry Status"]
+                    )
+                    letter_idx = _find_header_index(
+                        header_map, ["Harf Notu", "Harf Not", "Letter Grade"]
+                    )
+
+                    if student_no_idx is None:
+                        messages.error(request, "Öğrenci No sütunu bulunamadı; kayıt yapılamadı.")
+                    else:
+                        updated = 0
+                        for row in table_rows:
+                            if student_no_idx >= len(row):
+                                continue
+                            student_number = row[student_no_idx].strip()
+                            if not student_number:
+                                continue
+
+                            first = row[name_idx].strip() if name_idx is not None and name_idx < len(row) else ""
+                            last = row[surname_idx].strip() if surname_idx is not None and surname_idx < len(row) else ""
+                            full_name = f"{first} {last}".strip()
+
+                            student, _ = Student.objects.get_or_create(
+                                student_number=student_number,
+                                defaults={"full_name": full_name or student_number},
+                            )
+                            if full_name and student.full_name != full_name:
+                                student.full_name = full_name
+                                student.save(update_fields=["full_name"])
+
+                            enrollment = Enrollment.objects.filter(
+                                student=student, course=selected_course
+                            ).first()
+                            if not enrollment:
+                                enrollment = Enrollment.objects.create(
+                                    student=student, course=selected_course, year=2023
+                                )
+
+                            if class_idx is not None and class_idx < len(row):
+                                class_val = row[class_idx].strip()
+                                enrollment.class_level = int(class_val) if class_val.isdigit() else None
+                            if entry_idx is not None and entry_idx < len(row):
+                                enrollment.entry_status = row[entry_idx].strip()
+                            if letter_idx is not None and letter_idx < len(row):
+                                enrollment.letter_grade = row[letter_idx].strip()
+                            enrollment.save()
+
+                            for col_index, component in component_map.items():
+                                if col_index >= len(row):
+                                    continue
+                                raw_score = row[col_index].strip()
+                                if not raw_score:
+                                    continue
+                                try:
+                                    score = float(raw_score.replace(",", "."))
+                                except ValueError:
+                                    continue
+                                assessment, _ = StudentAssessment.objects.get_or_create(
+                                    enrollment=enrollment, assessment_component=component
+                                )
+                                if assessment.score != score:
+                                    assessment.score = score
+                                    assessment.save(update_fields=["score"])
+                            updated += 1
+                        messages.success(
+                            request,
+                            f"Notlar kaydedildi. Güncellenen öğrenci sayısı: {updated}",
+                        )
+                        _backup_database()
                 use_db_table = True
+                cache.delete("analytics_panel_v1")
 
     if selected_course:
         has_grade_data = StudentAssessment.objects.filter(enrollment__course=selected_course).exists()
@@ -1036,21 +1094,27 @@ def grade_upload(request):
 def analytics_panel(request):
     """LO-PO bağlantılarını grafik/harita görünümünde sunar."""
     bootstrap_demo_data()
-    courses = Course.objects.all()
-    program_outcomes = ProgramOutcome.objects.all()
-    links = (
-        LearningOutcomeProgramOutcome.objects.select_related("learning_outcome", "program_outcome", "learning_outcome__course")
-        .all()
-    )
+    cache_key = "analytics_panel_v2"
+    cached_context = cache.get(cache_key)
+    if cached_context:
+        return render(request, "assessment/analytics.html", cached_context)
 
-    # Heatmap: ders x PO, değer ortalama ağırlık
+    courses = list(Course.objects.all())
+    program_outcomes = list(ProgramOutcome.objects.all())
+    if not CoursePOHeatmap.objects.exists():
+        _update_po_heatmap(courses, program_outcomes)
+    heatmap_items = {
+        (item.course_id, item.program_outcome_id): item
+        for item in CoursePOHeatmap.objects.filter(course__in=courses, program_outcome__in=program_outcomes)
+    }
+
     heatmap = []
     for course in courses:
         row = {"course": course, "values": []}
         for po in program_outcomes:
-            weights = [link.weight for link in links if link.learning_outcome.course_id == course.id and link.program_outcome_id == po.id]
-            avg_weight = round(sum(weights) / len(weights), 2) if weights else 0
-            percent = int((avg_weight / 5) * 100) if avg_weight else 0
+            item = heatmap_items.get((course.id, po.id))
+            avg_weight = item.avg_weight if item else 0
+            percent = item.percent if item else 0
             row["values"].append({"po": po, "value": avg_weight, "percent": percent})
         heatmap.append(row)
 
@@ -1062,11 +1126,13 @@ def analytics_panel(request):
             "po": link.program_outcome,
             "weight": link.weight,
         }
-        for link in links
+        for link in LearningOutcomeProgramOutcome.objects.select_related(
+            "learning_outcome", "program_outcome", "learning_outcome__course"
+        )
     ]
 
     # Not bileşeni katkıları
-    contribs = (
+    contribs = list(
         LearningOutcomeContribution.objects.select_related(
             "assessment_component", "learning_outcome", "assessment_component__course"
         )
@@ -1081,6 +1147,7 @@ def analytics_panel(request):
         "edges": edges,
         "contribs": contribs,
     }
+    cache.set(cache_key, context, 300)
     return render(request, "assessment/analytics.html", context)
 
 

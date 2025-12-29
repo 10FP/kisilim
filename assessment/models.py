@@ -3,7 +3,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 
 
 class ProgramOutcome(models.Model):
-    code = models.CharField(max_length=10)
+    code = models.CharField(max_length=10, db_index=True)
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
 
@@ -15,7 +15,7 @@ class ProgramOutcome(models.Model):
 
 
 class Course(models.Model):
-    code = models.CharField(max_length=15)
+    code = models.CharField(max_length=15, db_index=True)
     name = models.CharField(max_length=255)
     term = models.CharField(max_length=50, blank=True)
 
@@ -28,7 +28,7 @@ class Course(models.Model):
 
 class LearningOutcome(models.Model):
     course = models.ForeignKey(Course, related_name="learning_outcomes", on_delete=models.CASCADE)
-    code = models.CharField(max_length=10)
+    code = models.CharField(max_length=10, db_index=True)
     description = models.TextField()
 
     class Meta:
@@ -58,7 +58,7 @@ class LearningOutcomeProgramOutcome(models.Model):
 
 class Student(models.Model):
     full_name = models.CharField(max_length=255)
-    student_number = models.CharField(max_length=20, blank=True)
+    student_number = models.CharField(max_length=20, blank=True, db_index=True)
 
     class Meta:
         ordering = ["full_name"]
@@ -70,7 +70,7 @@ class Student(models.Model):
 class Enrollment(models.Model):
     student = models.ForeignKey(Student, related_name="enrollments", on_delete=models.CASCADE)
     course = models.ForeignKey(Course, related_name="enrollments", on_delete=models.CASCADE)
-    year = models.PositiveSmallIntegerField(default=2023)
+    year = models.PositiveSmallIntegerField(default=2023, db_index=True)
     section = models.CharField(max_length=10, blank=True)
     class_level = models.PositiveSmallIntegerField(null=True, blank=True)
     entry_status = models.CharField(max_length=20, blank=True)
@@ -91,7 +91,7 @@ class Enrollment(models.Model):
 
 class AssessmentComponent(models.Model):
     course = models.ForeignKey(Course, related_name="assessments", on_delete=models.CASCADE)
-    name = models.CharField(max_length=100)
+    name = models.CharField(max_length=100, db_index=True)
     weight_percent = models.PositiveSmallIntegerField(
         default=0,
         validators=[MinValueValidator(0), MaxValueValidator(100)],
@@ -135,3 +135,18 @@ class StudentAssessment(models.Model):
 
     def __str__(self):
         return f"{self.enrollment} - {self.assessment_component}: {self.score}"
+
+
+class CoursePOHeatmap(models.Model):
+    course = models.ForeignKey(Course, related_name="po_heatmap", on_delete=models.CASCADE)
+    program_outcome = models.ForeignKey(ProgramOutcome, related_name="course_heatmap", on_delete=models.CASCADE)
+    avg_weight = models.FloatField(default=0)
+    percent = models.PositiveSmallIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("course", "program_outcome")
+        ordering = ["course__code", "program_outcome__code"]
+
+    def __str__(self):
+        return f"{self.course.code} {self.program_outcome.code}: {self.avg_weight}"
