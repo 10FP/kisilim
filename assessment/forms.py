@@ -6,7 +6,9 @@ from .models import (
     LearningOutcome,
     LearningOutcomeContribution,
     LearningOutcomeProgramOutcome,
+    Enrollment,
     ProgramOutcome,
+    Student,
 )
 
 
@@ -84,4 +86,32 @@ class ProgramOutcomeForm(forms.ModelForm):
             "code": forms.TextInput(attrs={"placeholder": "PO5", "class": "input"}),
             "title": forms.TextInput(attrs={"placeholder": "Program çıktısı başlığı", "class": "input"}),
             "description": forms.Textarea(attrs={"rows": 3, "placeholder": "İsteğe bağlı açıklama", "class": "input"}),
+        }
+
+
+class StudentForm(forms.ModelForm):
+    class Meta:
+        model = Student
+        fields = ("full_name", "student_number")
+        labels = {"full_name": "Ad Soyad", "student_number": "Öğrenci No"}
+        widgets = {
+            "full_name": forms.TextInput(attrs={"placeholder": "Örn: Ayşe Demir", "class": "input"}),
+            "student_number": forms.TextInput(attrs={"placeholder": "20231234", "class": "input"}),
+        }
+
+
+class EnrollmentForm(forms.ModelForm):
+    class Meta:
+        model = Enrollment
+        fields = ("student", "year", "section", "result")
+        labels = {
+            "student": "Öğrenci",
+            "year": "Yıl",
+            "section": "Şube",
+            "result": "Durum",
+        }
+        widgets = {
+            "year": forms.NumberInput(attrs={"placeholder": "2023", "class": "input"}),
+            "section": forms.TextInput(attrs={"placeholder": "A/B", "class": "input"}),
+            "result": forms.Select(attrs={"class": "input"}),
         }

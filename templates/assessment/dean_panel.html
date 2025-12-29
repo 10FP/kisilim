@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="panel dean-hero">
+    <header class="panel-header">
+        <div>
+            <p class="eyebrow">Dekan Paneli</p>
+            <h2>Tüm program, ders ve öğrenci görünümü</h2>
+            <p class="muted">Program çıktılarından ders bileşenlerine kadar tüm yapıyı tek yerden izleyin.</p>
+        </div>
+        <div class="action-group">
+            <a class="btn primary" href="/instructor/">Öğretmen Paneline Git</a>
+            <a class="btn ghost" href="/instructor/grades/">Not Verme</a>
+            <a class="btn ghost" href="/admin/">Admin</a>
+        </div>
+    </header>
+
+    <div class="cards dean-stats">
+        <article class="card animate-in">
+            <h3>Program</h3>
+            <p class="muted">PÇ: {{ totals.program_outcomes }} | LO: {{ totals.learning_outcomes }}</p>
+        </article>
+        <article class="card animate-in">
+            <h3>Dersler</h3>
+            <p class="muted">Toplam ders: {{ totals.courses }} | Bileşen: {{ totals.assessments }}</p>
+        </article>
+        <article class="card animate-in">
+            <h3>Öğrenciler</h3>
+            <p class="muted">Öğrenci: {{ totals.students }} | Kayıt: {{ totals.enrollments }}</p>
+        </article>
+    </div>
+</section>
+
+<section class="panel">
+    <details class="fragment" open>
+        <summary>Program Çıktıları (PÇ)</summary>
+        <div class="fragment-content">
+            <div class="table-wrapper">
+                <table class="compact">
+                    <thead><tr><th>Kod</th><th>Başlık</th><th>Açıklama</th></tr></thead>
+                    <tbody>
+                    {% for po in program_outcomes %}
+                        <tr>
+                            <td>{{ po.code }}</td>
+                            <td>{{ po.title }}</td>
+                            <td class="muted">{{ po.description|default:"-" }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="3" class="muted">PÇ bulunamadı.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </details>
+
+    <details class="fragment">
+        <summary>Dersler ve Özet Bilgiler</summary>
+        <div class="fragment-content">
+            <div class="table-wrapper">
+                <table class="compact">
+                    <thead><tr><th>Kod</th><th>Ders</th><th>Dönem</th><th>LO</th><th>Bileşen</th><th>Kayıt</th></tr></thead>
+                    <tbody>
+                    {% for course in courses %}
+                        <tr>
+                            <td>{{ course.code }}</td>
+                            <td>{{ course.name }}</td>
+                            <td>{{ course.term }}</td>
+                            <td>{{ course.lo_count }}</td>
+                            <td>{{ course.assessment_count }}</td>
+                            <td>{{ course.enrollment_count }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="6" class="muted">Ders bulunamadı.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </details>
+
+    <details class="fragment">
+        <summary>Öğrenciler</summary>
+        <div class="fragment-content">
+            <div class="table-wrapper">
+                <table class="compact">
+                    <thead><tr><th>Ad Soyad</th><th>Öğrenci No</th><th>Kayıt Sayısı</th></tr></thead>
+                    <tbody>
+                    {% for student in students %}
+                        <tr>
+                            <td>{{ student.full_name }}</td>
+                            <td>{{ student.student_number }}</td>
+                            <td>{{ student.enrollment_count }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="3" class="muted">Öğrenci bulunamadı.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </details>
+
+    <details class="fragment">
+        <summary>Ders Kayıtları</summary>
+        <div class="fragment-content">
+            <div class="table-wrapper">
+                <table class="compact">
+                    <thead><tr><th>Ders</th><th>Öğrenci</th><th>Yıl</th><th>Şube</th><th>Durum</th></tr></thead>
+                    <tbody>
+                    {% for enrollment in enrollments %}
+                        <tr>
+                            <td>{{ enrollment.course.code }}</td>
+                            <td>{{ enrollment.student.full_name }}</td>
+                            <td>{{ enrollment.year }}</td>
+                            <td>{{ enrollment.section }}</td>
+                            <td>{{ enrollment.get_result_display }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="5" class="muted">Kayıt bulunamadı.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </details>
+
+    <details class="fragment">
+        <summary>LO ve Bileşenler</summary>
+        <div class="fragment-content">
+            <div class="two-col">
+                <div class="card">
+                    <h4>Öğrenme Çıktıları</h4>
+                    <div class="table-wrapper">
+                        <table class="compact">
+                            <thead><tr><th>Ders</th><th>LO</th><th>Açıklama</th></tr></thead>
+                            <tbody>
+                            {% for lo in learning_outcomes %}
+                                <tr>
+                                    <td>{{ lo.course.code }}</td>
+                                    <td>{{ lo.code }}</td>
+                                    <td class="muted">{{ lo.description }}</td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="3" class="muted">LO bulunamadı.</td></tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card">
+                    <h4>Not Bileşenleri</h4>
+                    <div class="table-wrapper">
+                        <table class="compact">
+                            <thead><tr><th>Ders</th><th>Bileşen</th><th>Ağırlık</th></tr></thead>
+                            <tbody>
+                            {% for comp in assessments %}
+                                <tr>
+                                    <td>{{ comp.course.code }}</td>
+                                    <td>{{ comp.name }}</td>
+                                    <td>{{ comp.weight_percent }}%</td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="3" class="muted">Bileşen bulunamadı.</td></tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </details>
+
+    <details class="fragment">
+        <summary>LO–PO Haritası ve Katkılar</summary>
+        <div class="fragment-content">
+            <div class="two-col">
+                <div class="card">
+                    <h4>LO → PO Ağırlıkları</h4>
+                    <div class="table-wrapper">
+                        <table class="compact">
+                            <thead><tr><th>Ders</th><th>LO</th><th>PO</th><th>Ağırlık</th></tr></thead>
+                            <tbody>
+                            {% for link in lo_po_links %}
+                                <tr>
+                                    <td>{{ link.learning_outcome.course.code }}</td>
+                                    <td>{{ link.learning_outcome.code }}</td>
+                                    <td>{{ link.program_outcome.code }}</td>
+                                    <td>{{ link.weight }}</td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="4" class="muted">Eşleşme yok.</td></tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card">
+                    <h4>Not Bileşeni Katkıları</h4>
+                    <div class="table-wrapper">
+                        <table class="compact">
+                            <thead><tr><th>Ders</th><th>Bileşen</th><th>LO</th><th>Katkı (%)</th></tr></thead>
+                            <tbody>
+                            {% for c in contribs %}
+                                <tr>
+                                    <td>{{ c.assessment_component.course.code }}</td>
+                                    <td>{{ c.assessment_component.name }}</td>
+                                    <td>{{ c.learning_outcome.code }}</td>
+                                    <td>{{ c.contribution_percent }}%</td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="4" class="muted">Katkı yok.</td></tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </details>
+</section>
+{% endblock %}

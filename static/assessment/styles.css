@@ -237,6 +237,31 @@ table.grade-table input {
     box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
 }
 .card-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.dean-hero { background: linear-gradient(120deg, #ffffff 0%, #eef2ff 55%, #e0f2fe 100%); }
+.dean-stats .card { border-left: 4px solid var(--primary); }
+.animate-in { animation: fade-up 0.5s ease both; }
+.animate-in:nth-child(2) { animation-delay: 0.08s; }
+.animate-in:nth-child(3) { animation-delay: 0.16s; }
+.fragment { border: 1px solid var(--border); border-radius: 14px; padding: 0.2rem 0.8rem; margin-bottom: 1rem; background: #fff; }
+.fragment summary { cursor: pointer; font-weight: 700; padding: 0.8rem 0.2rem; list-style: none; }
+.fragment summary::-webkit-details-marker { display: none; }
+.fragment summary::after {
+    content: "+";
+    float: right;
+    font-weight: 700;
+    color: var(--muted);
+}
+.fragment[open] summary::after { content: "–"; }
+.fragment-content { padding: 0.4rem 0 1rem; animation: fragment-in 0.35s ease; }
+.fragment[open] .fragment-content { animation: fragment-in 0.35s ease; }
+@keyframes fragment-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fade-up {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+}
 
 @media (max-width: 768px) {
     .hero { flex-direction: column; }

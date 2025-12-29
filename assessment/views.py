@@ -6,7 +6,7 @@ import zipfile
 import xml.etree.ElementTree as ET
 
 from django.conf import settings
-from django.db.models import Avg, Max
+from django.db.models import Avg, Count, Max
 from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.http import FileResponse, Http404, JsonResponse
@@ -26,10 +26,12 @@ from .models import (
 from .forms import (
     AssessmentComponentForm,
     CourseForm,
+    EnrollmentForm,
     LearningOutcomeContributionForm,
     LearningOutcomeForm,
     LearningOutcomeProgramOutcomeForm,
     ProgramOutcomeForm,
+    StudentForm,
 )
 
 
@@ -432,6 +434,8 @@ def instructor_panel(request):
     course_form = CourseForm(prefix="course")
     learning_outcome_form = LearningOutcomeForm(prefix="lo")
     program_outcome_form = ProgramOutcomeForm(prefix="po")
+    student_form = StudentForm(prefix="student")
+    enrollment_form = EnrollmentForm(prefix="enroll")
     component_form = AssessmentComponentForm(prefix="component", instance=component_instance)
     lo_contribution_form = LearningOutcomeContributionForm(prefix="contrib", instance=contrib_instance)
     lopo_form = LearningOutcomeProgramOutcomeForm(prefix="lopo", instance=lopo_instance)
@@ -442,6 +446,7 @@ def instructor_panel(request):
         lo_contribution_form.fields["assessment_component"].queryset = course.assessments.all()
         lo_contribution_form.fields["learning_outcome"].queryset = course.learning_outcomes.all()
         lopo_form.fields["learning_outcome"].queryset = course.learning_outcomes.all()
+        enrollment_form.fields["student"].queryset = Student.objects.all()
 
     limit_forms(selected_course)
 
@@ -470,6 +475,45 @@ def instructor_panel(request):
                 messages.success(request, f"PÇ eklendi: {po.code}")
             else:
                 messages.error(request, "PÇ eklenemedi.")
+
+        elif form_type == "student":
+            student_form = StudentForm(request.POST, prefix="student")
+            if student_form.is_valid():
+                student = student_form.save()
+                messages.success(request, f"Öğrenci eklendi: {student.full_name}")
+            else:
+                messages.error(request, "Öğrenci eklenemedi.")
+
+        elif form_type == "student_delete":
+            object_id = parse_id(request.POST.get("object_id"))
+            student = Student.objects.filter(id=object_id).first()
+            if student:
+                student.delete()
+                messages.success(request, "Öğrenci silindi.")
+            else:
+                messages.error(request, "Öğrenci silinemedi.")
+
+        elif form_type == "enrollment":
+            enrollment_form = EnrollmentForm(request.POST, prefix="enroll")
+            if enrollment_form.is_valid():
+                enrollment = enrollment_form.save(commit=False)
+                enrollment.course = selected_course
+                try:
+                    enrollment.save()
+                    messages.success(request, "Öğrenci derse eklendi.")
+                except Exception:
+                    messages.error(request, "Bu öğrenci zaten bu derse kayıtlı olabilir.")
+            else:
+                messages.error(request, "Öğrenci derse eklenemedi.")
+
+        elif form_type == "enrollment_delete":
+            object_id = parse_id(request.POST.get("object_id"))
+            enrollment = Enrollment.objects.filter(id=object_id, course=selected_course).first()
+            if enrollment:
+                enrollment.delete()
+                messages.success(request, "Ders kaydı silindi.")
+            else:
+                messages.error(request, "Ders kaydı silinemedi.")
 
         elif form_type == "lo":
             learning_outcome_form = LearningOutcomeForm(request.POST, prefix="lo")
@@ -559,6 +603,8 @@ def instructor_panel(request):
                 course_form,
                 learning_outcome_form,
                 program_outcome_form,
+                student_form,
+                enrollment_form,
                 component_form,
                 lo_contribution_form,
                 lopo_form,
@@ -577,6 +623,8 @@ def instructor_panel(request):
             course_form,
             learning_outcome_form,
             program_outcome_form,
+            student_form,
+            enrollment_form,
             component_form,
             lo_contribution_form,
             lopo_form,
@@ -593,6 +641,8 @@ def _instructor_context(
     course_form,
     learning_outcome_form,
     program_outcome_form,
+    student_form,
+    enrollment_form,
     component_form,
     lo_contribution_form,
     lopo_form,
@@ -603,9 +653,15 @@ def _instructor_context(
     return {
         "selected_course": selected_course,
         "courses": courses,
+        "students": Student.objects.all(),
+        "enrollments": Enrollment.objects.filter(course=selected_course).select_related("student")
+        if selected_course
+        else [],
         "course_form": course_form,
         "learning_outcome_form": learning_outcome_form,
         "program_outcome_form": program_outcome_form,
+        "student_form": student_form,
+        "enrollment_form": enrollment_form,
         "component_form": component_form,
         "lo_contribution_form": lo_contribution_form,
         "lopo_form": lopo_form,
@@ -702,6 +758,61 @@ def _find_header_index(header_map, candidates):
     return None
 
 
+def _split_name(full_name):
+    if not full_name:
+        return "", ""
+    parts = full_name.strip().split()
+    if len(parts) == 1:
+        return parts[0], ""
+    return " ".join(parts[:-1]), parts[-1]
+
+
+def _build_course_grade_table(course):
+    if not course:
+        return [], [], []
+    assessments = list(AssessmentComponent.objects.filter(course=course).order_by("name"))
+    enrollments = list(
+        Enrollment.objects.filter(course=course)
+        .select_related("student")
+        .order_by("student__student_number", "student__full_name")
+    )
+    if not enrollments and not assessments:
+        return [], [], []
+
+    headers = ["No", "Öğrenci No", "Adı", "Soyadı", "Snf", "Girme Durum"]
+    headers += [f"{comp.name}(%{comp.weight_percent})" for comp in assessments]
+    headers.append("Harf Notu")
+
+    numeric_columns = list(range(6, 6 + len(assessments)))
+    score_map = {}
+    if enrollments and assessments:
+        score_map = {
+            (sa.enrollment_id, sa.assessment_component_id): sa.score
+            for sa in StudentAssessment.objects.filter(
+                enrollment__in=enrollments, assessment_component__in=assessments
+            )
+        }
+
+    rows = []
+    for index, enrollment in enumerate(enrollments, start=1):
+        student = enrollment.student
+        first, last = _split_name(student.full_name)
+        row = [
+            str(index),
+            student.student_number or "",
+            first,
+            last,
+            str(enrollment.class_level) if enrollment.class_level is not None else "",
+            enrollment.entry_status or "",
+        ]
+        for comp in assessments:
+            score = score_map.get((enrollment.id, comp.id))
+            row.append("" if score is None else str(score))
+        row.append(enrollment.letter_grade or "")
+        rows.append(row)
+    return headers, rows, numeric_columns
+
+
 def grade_template_download(request):
     template_name = "Sample Excel Format from OBS.xlsx"
     template_path = Path(settings.BASE_DIR) / template_name
@@ -750,26 +861,14 @@ def grade_upload(request):
     selected_course = courses.filter(id=request.GET.get("course")).first() or courses.first()
 
     uploaded_filename = None
+    use_db_table = False
 
     template_name = "Sample Excel Format from OBS.xlsx"
     template_path = Path(settings.BASE_DIR) / template_name
     template_available = template_path.exists()
     table_headers = []
     table_rows = []
-    raw_headers = []
-    if template_available:
-        raw_rows = _read_xlsx_preview(template_path)
-        if raw_rows:
-            raw_headers = raw_rows[0]
-            table_headers = [_normalize_header(header) for header in raw_headers]
-            header_len = len(table_headers)
-            for row in raw_rows[1:]:
-                if len(row) < header_len:
-                    row = row + [""] * (header_len - len(row))
-                table_rows.append(row[:header_len])
-
-    component_columns = _component_columns(table_headers)
-    numeric_columns = sorted(component_columns.keys())
+    numeric_columns = []
 
     if request.method == "POST":
         selected_course = courses.filter(id=request.POST.get("course")).first() or selected_course
@@ -803,6 +902,15 @@ def grade_upload(request):
             else:
                 component_columns = _component_columns(table_headers)
                 numeric_columns = sorted(component_columns.keys())
+                if component_columns:
+                    expected_names = {info["name"] for info in component_columns.values()}
+                    removed_qs = AssessmentComponent.objects.filter(course=selected_course).exclude(
+                        name__in=expected_names
+                    )
+                    removed_count = removed_qs.count()
+                    if removed_count:
+                        removed_qs.delete()
+                        messages.info(request, f"Excel'de olmayan {removed_count} bileşen kaldırıldı.")
                 component_map = {}
                 for col_index, info in component_columns.items():
                     component, _ = AssessmentComponent.objects.get_or_create(
@@ -888,6 +996,27 @@ def grade_upload(request):
                         request,
                         f"Notlar kaydedildi. Güncellenen öğrenci sayısı: {updated}",
                     )
+                use_db_table = True
+
+    if selected_course:
+        has_grade_data = StudentAssessment.objects.filter(enrollment__course=selected_course).exists()
+        if use_db_table or has_grade_data:
+            db_headers, db_rows, db_numeric = _build_course_grade_table(selected_course)
+            if db_headers:
+                table_headers = db_headers
+                table_rows = db_rows
+                numeric_columns = db_numeric
+
+    if not table_headers and template_available:
+        raw_rows = _read_xlsx_preview(template_path)
+        if raw_rows:
+            table_headers = [_normalize_header(header) for header in raw_rows[0]]
+            header_len = len(table_headers)
+            for row in raw_rows[1:]:
+                if len(row) < header_len:
+                    row = row + [""] * (header_len - len(row))
+                table_rows.append(row[:header_len])
+            numeric_columns = sorted(_component_columns(table_headers).keys())
 
     context = {
         "courses": courses,
@@ -953,6 +1082,52 @@ def analytics_panel(request):
         "contribs": contribs,
     }
     return render(request, "assessment/analytics.html", context)
+
+
+def dean_panel(request):
+    """Üst yönetim paneli: tüm ders, öğrenci ve katkı verileri."""
+    bootstrap_demo_data()
+    courses = (
+        Course.objects.annotate(
+            lo_count=Count("learning_outcomes", distinct=True),
+            assessment_count=Count("assessments", distinct=True),
+            enrollment_count=Count("enrollments", distinct=True),
+        )
+        .order_by("code")
+    )
+    students = Student.objects.annotate(enrollment_count=Count("enrollments", distinct=True)).order_by("full_name")
+    enrollments = Enrollment.objects.select_related("student", "course").order_by(
+        "course__code", "student__full_name"
+    )
+    program_outcomes = ProgramOutcome.objects.order_by("code")
+    learning_outcomes = LearningOutcome.objects.select_related("course").order_by("course__code", "code")
+    assessments = AssessmentComponent.objects.select_related("course").order_by("course__code", "name")
+    lo_po_links = LearningOutcomeProgramOutcome.objects.select_related(
+        "learning_outcome", "program_outcome", "learning_outcome__course"
+    ).order_by("learning_outcome__course__code", "learning_outcome__code")
+    contribs = LearningOutcomeContribution.objects.select_related(
+        "assessment_component", "learning_outcome", "assessment_component__course"
+    ).order_by("assessment_component__course__code", "assessment_component__name")
+
+    context = {
+        "courses": courses,
+        "students": students,
+        "enrollments": enrollments,
+        "program_outcomes": program_outcomes,
+        "learning_outcomes": learning_outcomes,
+        "assessments": assessments,
+        "lo_po_links": lo_po_links,
+        "contribs": contribs,
+        "totals": {
+            "courses": courses.count(),
+            "students": students.count(),
+            "enrollments": enrollments.count(),
+            "program_outcomes": program_outcomes.count(),
+            "learning_outcomes": learning_outcomes.count(),
+            "assessments": assessments.count(),
+        },
+    }
+    return render(request, "assessment/dean_panel.html", context)
 
 
 def schema_overview(request):

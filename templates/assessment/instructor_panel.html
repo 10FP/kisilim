@@ -93,6 +93,44 @@
             </form>
         </div>
         <div class="card">
+            <h4>0.3) Yeni öğrenci ekle</h4>
+            <p class="muted small">Öğrenci adını ve numarasını girin.</p>
+            <form method="post" class="form-grid">
+                {% csrf_token %}
+                <input type="hidden" name="form_type" value="student">
+                {% for field in student_form %}
+                    <label class="form-field">
+                        <span>{{ field.label }}</span>
+                        {{ field }}
+                        {% if field.help_text %}<small class="muted">{{ field.help_text }}</small>{% endif %}
+                        {% for error in field.errors %}<div class="error">{{ error }}</div>{% endfor %}
+                    </label>
+                {% endfor %}
+                <div class="action-group">
+                    <button type="submit" class="btn primary">Öğrenci Ekle</button>
+                </div>
+            </form>
+        </div>
+        <div class="card">
+            <h4>0.4) Derse öğrenci ekle</h4>
+            <p class="muted small">Seçili derse öğrenci kaydı oluşturun.</p>
+            <form method="post" class="form-grid">
+                {% csrf_token %}
+                <input type="hidden" name="form_type" value="enrollment">
+                {% for field in enrollment_form %}
+                    <label class="form-field">
+                        <span>{{ field.label }}</span>
+                        {{ field }}
+                        {% if field.help_text %}<small class="muted">{{ field.help_text }}</small>{% endif %}
+                        {% for error in field.errors %}<div class="error">{{ error }}</div>{% endfor %}
+                    </label>
+                {% endfor %}
+                <div class="action-group">
+                    <button type="submit" class="btn primary">Derse Ekle</button>
+                </div>
+            </form>
+        </div>
+        <div class="card">
             <h4>1) Not Bileşeni ekle</h4>
             <p class="muted small">Bu bileşenlerin ağırlıkları birlikte %100'ü geçmesin. (Örn: Vize %40, Proje %60)</p>
             {% if component_form.instance.pk %}<div class="note">Düzenleme: {{ component_form.instance.name }}</div>{% endif %}
@@ -242,6 +280,56 @@
                     </tr>
                 {% empty %}
                     <tr><td colspan="4" class="muted">Henüz eşleşme yok.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </article>
+        <article class="card">
+            <h4>Öğrenciler</h4>
+            <table class="compact">
+                <thead><tr><th>Ad Soyad</th><th>Öğrenci No</th><th>Aksiyon</th></tr></thead>
+                <tbody>
+                {% for student in students %}
+                    <tr>
+                        <td>{{ student.full_name }}</td>
+                        <td>{{ student.student_number }}</td>
+                        <td class="actions">
+                            <form method="post">
+                                {% csrf_token %}
+                                <input type="hidden" name="form_type" value="student_delete">
+                                <input type="hidden" name="object_id" value="{{ student.id }}">
+                                <button type="submit" class="btn danger">Sil</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="3" class="muted">Öğrenci bulunamadı.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </article>
+        <article class="card">
+            <h4>Seçili ders kayıtları</h4>
+            <table class="compact">
+                <thead><tr><th>Öğrenci</th><th>Yıl</th><th>Şube</th><th>Durum</th><th>Aksiyon</th></tr></thead>
+                <tbody>
+                {% for enrollment in enrollments %}
+                    <tr>
+                        <td>{{ enrollment.student.full_name }}</td>
+                        <td>{{ enrollment.year }}</td>
+                        <td>{{ enrollment.section }}</td>
+                        <td>{{ enrollment.get_result_display }}</td>
+                        <td class="actions">
+                            <form method="post">
+                                {% csrf_token %}
+                                <input type="hidden" name="form_type" value="enrollment_delete">
+                                <input type="hidden" name="object_id" value="{{ enrollment.id }}">
+                                <button type="submit" class="btn danger">Sil</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="5" class="muted">Seçili derste kayıt yok.</td></tr>
                 {% endfor %}
                 </tbody>
             </table>
